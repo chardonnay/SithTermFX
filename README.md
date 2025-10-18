@@ -1,11 +1,11 @@
 # Techsenger JediTermFX
 
-| Support the Project! |
-|:-------------|
-| This project is open-source and free to use, both commercially and non-commercially, which is why we need your help in its development. If you like it, please give it a star ⭐ on GitHub — it helps others discover the project and increases its visibility. You can also contribute, for example, by fixing bugs 🐛 or suggesting improvements 💡, see [Contributing](#contributing). If you can, financial support 💰 is always appreciated, see [Support Us](#support-us). Thank you! |
+Techsenger JediTermFX is a Terminal Emulator for JavaFX. The project is a result of porting
+[JediTerm](https://github.com/JetBrains/jediterm) (commit 8366f2b) from Swing to JavaFX. JediTermFX exclusively
+utilizes JavaFX components. Therefore, the Terminal Emulator based on this library can be seamlessly integrated into
+any JavaFX application. A detailed comparison of terminal libraries is provided below.
 
 ## Table of Contents
-* [Overview](#overview)
 * [Demo](#demo)
     * [Htop](#demo-htop)
     * [Tig](#demo-tig)
@@ -24,14 +24,7 @@
     * [Using Distro](#application-distro)
 * [License](#license)
 * [Contributing](#contributing)
-* [👉 Support Us](#support-us)
-
-## Overview <a name="overview"></a>
-
-Techsenger JediTermFX is a Terminal Emulator for JavaFX. The project is a result of porting
-[JediTerm](https://github.com/JetBrains/jediterm) (commit 8366f2b) from Swing to JavaFX. JediTermFX exclusively
-utilizes JavaFX components. Therefore, the Terminal Emulator based on this library can be seamlessly integrated into
-any JavaFX application. A detailed comparison of terminal libraries is provided below.
+* [Support Us](#support-us)
 
 ## Demo <a name="demo"></a>
 
@@ -156,11 +149,11 @@ one of the above-listed licenses.
 We welcome all contributions. You can help by reporting bugs, suggesting improvements, or submitting pull requests
 with fixes and new features. If you have any questions, feel free to reach out — we’ll be happy to assist you.
 
-## 👉 Support Us <a name="support-us"></a>
+## Support Us <a name="support-us"></a>
 
-You can support us financially through [GitHub Sponsors](https://github.com/sponsors/techsenger). Your
-contribution directly helps us keep our open-source projects active, improve their features, and offer ongoing support.
-Besides, we offer multiple sponsorship tiers, with different rewards.
+You can support our open-source work through [GitHub Sponsors](https://github.com/sponsors/techsenger).
+Your contribution helps us maintain projects, develop new features, and provide ongoing improvements.
+Multiple sponsorship tiers are available, each offering different levels of recognition and benefits.
 
 
 
