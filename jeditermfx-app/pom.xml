@@ -38,6 +38,18 @@
             </properties>
         </profile>
         <profile>
+            <id>mac-aarch64</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>aarch64</arch>
+                </os>
+            </activation>
+            <properties>
+                <javafx.classifier>mac-aarch64</javafx.classifier>
+            </properties>
+        </profile>
+        <profile>
             <id>windows</id>
             <activation>
                 <os>
@@ -47,6 +59,20 @@
             <properties>
                 <javafx.classifier>win</javafx.classifier>
             </properties>
+        </profile>
+        <profile>
+            <id>split</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.openjfx</groupId>
+                        <artifactId>javafx-maven-plugin</artifactId>
+                        <configuration>
+                            <mainClass>com.techsenger.jeditermfx.app.example.SplitTerminalShellExample</mainClass>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 
@@ -132,9 +158,11 @@
                 <version>${javafx.plugin.version}</version>
                 <configuration>
                     <mainClass>com.techsenger.jeditermfx.app.JediTermFx</mainClass>
-                    <options>
+                    <!-- Debug options disabled by default to avoid "Address already in use" when
+                         a previous instance is still running. Use -Djavafx.options="-Xrunjdwp:..." for debugging. -->
+                    <!--<options>
                         <option>-Xrunjdwp:transport=dt_socket,address=7700,server=y,suspend=n</option>
-                    </options>
+                    </options>-->
                     <!--<commandlineArgs>theme=dark</commandlineArgs>-->
                 </configuration>
             </plugin>

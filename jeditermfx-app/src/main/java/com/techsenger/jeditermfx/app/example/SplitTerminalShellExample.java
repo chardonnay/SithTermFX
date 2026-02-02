@@ -17,8 +17,12 @@ import java.util.Map;
 
 import com.techsenger.jeditermfx.core.util.Platform;
 import com.techsenger.jeditermfx.ui.DefaultHyperlinkFilter;
+import com.techsenger.jeditermfx.ui.settings.MutableFontSizeProvider;
 import javafx.application.Application;
 import javafx.scene.Scene;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.stage.Stage;
 
 /**
@@ -43,6 +47,32 @@ public class SplitTerminalShellExample extends Application {
         });
 
         Scene scene = new Scene(splitPane, 800, 600);
+        var splitPaneCss = SplitTerminalShellExample.class.getResource("split-pane.css");
+        if (splitPaneCss != null) {
+            scene.getStylesheets().add(splitPaneCss.toExternalForm());
+        }
+        // Font zoom via Scene accelerators (more reliable than KeyEvent on Mac)
+        if (settingsProvider instanceof MutableFontSizeProvider) {
+            MutableFontSizeProvider fontProvider = (MutableFontSizeProvider) settingsProvider;
+            Runnable zoomIn = () -> fontProvider.increaseFontSize(2);
+            Runnable zoomOut = () -> fontProvider.decreaseFontSize(2);
+            Runnable zoomReset = fontProvider::resetFontSize;
+            // SHORTCUT = Cmd on Mac, Ctrl on Win/Linux
+            // Zoom In: Cmd/Ctrl + Plus (EQUALS, ADD, or with Shift)
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.SHIFT_DOWN, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.ADD, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.PLUS, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            // Zoom Out: Cmd/Ctrl + Minus
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.MINUS, KeyCombination.SHORTCUT_DOWN), zoomOut);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.SUBTRACT, KeyCombination.SHORTCUT_DOWN), zoomOut);
+            // Reset: Cmd/Ctrl + 0
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.SHORTCUT_DOWN), zoomReset);
+        }
+        splitPane.prefWidthProperty().bind(scene.widthProperty());
+        splitPane.prefHeightProperty().bind(scene.heightProperty());
+        splitPane.setMinSize(0, 0);
+        splitPane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         stage.setScene(scene);
         stage.show();
     }

@@ -31,6 +31,14 @@ public interface UserSettingsProvider {
     }
 
     /**
+     * Whether this provider supports dynamic font size changes at runtime (e.g. via Ctrl+Plus/Minus).
+     * Used to show font size menu items in the context menu.
+     */
+    default boolean supportsDynamicFontSize() {
+        return this instanceof MutableFontSizeProvider;
+    }
+
+    /**
      * @return vertical scaling factor
      */
     default float getLineSpacing() {

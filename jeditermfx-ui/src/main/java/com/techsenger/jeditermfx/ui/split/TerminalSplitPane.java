@@ -3,13 +3,15 @@ package com.techsenger.jeditermfx.ui.split;
 import com.techsenger.jeditermfx.core.TtyConnector;
 import com.techsenger.jeditermfx.ui.JediTermFxWidget;
 import com.techsenger.jeditermfx.ui.settings.SettingsProvider;
+import javafx.application.Platform;
 import javafx.geometry.Orientation;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -19,13 +21,17 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
  * Pane that supports splitting terminal widgets horizontally or vertically.
  * Supports nested splits (e.g. 2x2 grid). Each split has its own session (TtyConnector).
+ * Extends StackPane so children automatically fill the available space when the window is resized.
  */
-public class TerminalSplitPane extends Pane {
+public class TerminalSplitPane extends StackPane {
 
     private static final Logger logger = LoggerFactory.getLogger(TerminalSplitPane.class);
 
@@ -35,6 +41,7 @@ public class TerminalSplitPane extends Pane {
 
     private SplitCell rootCell;
     private JediTermFxWidget focusedWidget;
+    private boolean broadcastMode = false;
 
     public TerminalSplitPane(@NotNull SettingsProvider settingsProvider,
                              @NotNull SplitConnectorFactory connectorFactory) {
@@ -50,6 +57,59 @@ public class TerminalSplitPane extends Pane {
         this.rootCell = createInitialCell();
         getChildren().add(rootCell.getNode());
         VBox.setVgrow(this, Priority.ALWAYS);
+    }
+    
+    /**
+     * Broadcasts input to all OTHER widgets (not the source widget).
+     */
+    private void broadcastToOthers(@NotNull JediTermFxWidget sourceWidget, @NotNull String data) {
+        if (!broadcastMode) return;
+        
+        List<JediTermFxWidget> allWidgets = getAllWidgets();
+        for (JediTermFxWidget widget : allWidgets) {
+            if (widget != sourceWidget) {
+                TtyConnector connector = widget.getTtyConnector();
+                if (connector != null && connector.isConnected()) {
+                    try {
+                        connector.write(data);
+                    } catch (IOException e) {
+                        logger.debug("Failed to broadcast to widget: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+    
+    private @Nullable String getControlSequence(KeyEvent event) {
+        switch (event.getCode()) {
+            case ENTER: return "\r";
+            case BACK_SPACE: return "\u007F";
+            case TAB: return "\t";
+            case ESCAPE: return "\u001B";
+            case UP: return "\u001B[A";
+            case DOWN: return "\u001B[B";
+            case RIGHT: return "\u001B[C";
+            case LEFT: return "\u001B[D";
+            case HOME: return "\u001B[H";
+            case END: return "\u001B[F";
+            case PAGE_UP: return "\u001B[5~";
+            case PAGE_DOWN: return "\u001B[6~";
+            case INSERT: return "\u001B[2~";
+            case DELETE: return "\u001B[3~";
+            case F1: return "\u001BOP";
+            case F2: return "\u001BOQ";
+            case F3: return "\u001BOR";
+            case F4: return "\u001BOS";
+            case F5: return "\u001B[15~";
+            case F6: return "\u001B[17~";
+            case F7: return "\u001B[18~";
+            case F8: return "\u001B[19~";
+            case F9: return "\u001B[20~";
+            case F10: return "\u001B[21~";
+            case F11: return "\u001B[23~";
+            case F12: return "\u001B[24~";
+            default: return null;
+        }
     }
 
     private @NotNull SplitCell createInitialCell() {
@@ -81,14 +141,61 @@ public class TerminalSplitPane extends Pane {
                 focusedWidget = widget;
             }
         });
-        widget.getPane().setOnContextMenuRequested(e -> {
-            showContextMenu(widget, e.getScreenX(), e.getScreenY());
+        widget.setContextMenuExtender(menu -> addSplitMenuItems(menu, widget));
+        
+        // Broadcast mode: register event filters on the WIDGET'S OUTER PANE
+        // This is the outermost container (myInnerPanel), ensuring our filter runs 
+        // BEFORE any inner filters in the capturing phase
+        var widgetPane = widget.getPane();
+        
+        widgetPane.addEventFilter(KeyEvent.KEY_TYPED, event -> {
+            if (!broadcastMode) return;
+            String character = event.getCharacter();
+            if (character != null && !character.isEmpty()) {
+                char c = character.charAt(0);
+                // Only skip specific control characters that are handled in KEY_PRESSED:
+                // \r (13) = ENTER, \t (9) = TAB, \u001B (27) = ESC, \u007F (127) = DEL
+                // All other control characters (like Ctrl+L = \u000C) should pass through
+                if (c == '\r' || c == '\t' || c == '\u001B' || c == '\u007F') {
+                    return;
+                }
+                broadcastToOthers(widget, character);
+            }
+        });
+        
+        widgetPane.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (!broadcastMode) return;
+            String sequence = getControlSequence(event);
+            if (sequence != null) {
+                broadcastToOthers(widget, sequence);
+            }
         });
     }
 
-    private void showContextMenu(@NotNull JediTermFxWidget widget, double screenX, double screenY) {
+    private void addSplitMenuItems(@NotNull ContextMenu menu, @NotNull JediTermFxWidget widget) {
         focusedWidget = widget;
-        ContextMenu menu = new ContextMenu();
+
+        // Font size - same pattern as split items; widget methods no-op when not supported
+        MenuItem increaseFont = new MenuItem("Increase font size");
+        increaseFont.setOnAction(e -> widget.increaseFontSize(2));
+        MenuItem decreaseFont = new MenuItem("Decrease font size");
+        decreaseFont.setOnAction(e -> widget.decreaseFontSize(2));
+        MenuItem resetFont = new MenuItem("Reset font size");
+        resetFont.setOnAction(e -> widget.resetFontSize());
+        menu.getItems().add(new SeparatorMenuItem());
+        menu.getItems().addAll(increaseFont, decreaseFont, resetFont);
+        menu.getItems().add(new SeparatorMenuItem());
+        
+        // Broadcast mode toggle
+        CheckMenuItem broadcastToggle = new CheckMenuItem("Broadcast mode (type in all terminals)");
+        broadcastToggle.setSelected(broadcastMode);
+        broadcastToggle.setOnAction(e -> {
+            setBroadcastMode(broadcastToggle.isSelected());
+        });
+        // Only enable when there are multiple terminals
+        broadcastToggle.setDisable(rootCell.countWidgets() <= 1);
+        menu.getItems().add(broadcastToggle);
+        menu.getItems().add(new SeparatorMenuItem());
 
         MenuItem splitRightSame = new MenuItem("Split right (same server)");
         splitRightSame.setOnAction(e -> split(SplitRequest.SplitMode.SAME_SERVER_NEW_SHELL, Orientation.HORIZONTAL));
@@ -113,7 +220,6 @@ public class TerminalSplitPane extends Pane {
                 new SeparatorMenuItem(),
                 closeSplit
         );
-        menu.show(getScene().getWindow(), screenX, screenY);
     }
 
     /**
@@ -190,6 +296,54 @@ public class TerminalSplitPane extends Pane {
     }
 
     /**
+     * Returns all terminal widgets in this split pane.
+     */
+    public @NotNull List<JediTermFxWidget> getAllWidgets() {
+        List<JediTermFxWidget> widgets = new ArrayList<>();
+        collectWidgets(rootCell, widgets);
+        return widgets;
+    }
+    
+    private void collectWidgets(@Nullable SplitCell cell, @NotNull List<JediTermFxWidget> widgets) {
+        if (cell == null) return;
+        if (cell.widget != null) {
+            widgets.add(cell.widget);
+        }
+        collectWidgets(cell.leftCell, widgets);
+        collectWidgets(cell.rightCell, widgets);
+    }
+    
+    /**
+     * Returns the number of terminal widgets in this split pane.
+     */
+    public int getWidgetCount() {
+        return rootCell != null ? rootCell.countWidgets() : 0;
+    }
+    
+    /**
+     * Checks if broadcast mode is enabled.
+     */
+    public boolean isBroadcastMode() {
+        return broadcastMode;
+    }
+    
+    /**
+     * Enables or disables broadcast mode.
+     * When enabled, keyboard input is sent to all terminal widgets simultaneously.
+     */
+    public void setBroadcastMode(boolean enabled) {
+        this.broadcastMode = enabled;
+        logger.info("Broadcast mode {}", enabled ? "enabled" : "disabled");
+    }
+    
+    /**
+     * Toggles broadcast mode on/off.
+     */
+    public void toggleBroadcastMode() {
+        setBroadcastMode(!broadcastMode);
+    }
+
+    /**
      * Closes all terminal sessions in this split pane.
      */
     public void closeAll() {
@@ -212,6 +366,8 @@ public class TerminalSplitPane extends Pane {
             this.leftCell = null;
             this.rightCell = null;
             StackPane wrapper = new StackPane(widget.getPane());
+            wrapper.setMinSize(0, 0);
+            wrapper.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
             VBox.setVgrow(wrapper, Priority.ALWAYS);
             this.node = wrapper;
         }
@@ -220,12 +376,25 @@ public class TerminalSplitPane extends Pane {
             this.widget = null;
             this.leftCell = left;
             this.rightCell = right;
-            this.splitPane = new SplitPane(left.getNode(), right.getNode());
+            Region leftNode = left.getNode();
+            Region rightNode = right.getNode();
+            leftNode.setMinWidth(0);
+            leftNode.setMinHeight(0);
+            leftNode.setMaxWidth(Double.MAX_VALUE);
+            leftNode.setMaxHeight(Double.MAX_VALUE);
+            rightNode.setMinWidth(0);
+            rightNode.setMinHeight(0);
+            rightNode.setMaxWidth(Double.MAX_VALUE);
+            rightNode.setMaxHeight(Double.MAX_VALUE);
+            this.splitPane = new SplitPane(leftNode, rightNode);
             splitPane.setOrientation(orientation);
             splitPane.setDividerPositions(0.5);
+            splitPane.setMinSize(0, 0);
             splitPane.setMaxWidth(Double.MAX_VALUE);
             splitPane.setMaxHeight(Double.MAX_VALUE);
             this.node = splitPane;
+            // Re-apply divider position after layout - prevents right pane from getting zero width
+            Platform.runLater(() -> splitPane.setDividerPositions(0.5));
         }
 
         Region getNode() {

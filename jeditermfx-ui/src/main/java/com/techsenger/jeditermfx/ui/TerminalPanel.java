@@ -50,8 +50,10 @@ import java.text.BreakIterator;
 import java.text.CharacterIterator;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import javafx.animation.KeyFrame;
@@ -143,6 +145,8 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     private final HBox pane = new HBox(canvasPane, scrollBar);
 
     private ContextMenu popup;
+
+    private Consumer<ContextMenu> myContextMenuExtender;
 
     /*font related*/
     private Font myNormalFont;
@@ -412,6 +416,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         });
         this.scrollBar.valueProperty().addListener((ov, oldV, newV) -> {
             this.swingClientScrollOrigin = resolveSwingScrollBarValue();
+            clampScrollOrigin();
             repaint();
         });
         createRepaintTimer();
@@ -495,6 +500,9 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             TerminalActionProvider provider =
                     getTerminalActionProvider(contextHyperlink != null ? contextHyperlink.getLinkInfo() : null, e);
             popup = createPopupMenu(provider);
+            if (myContextMenuExtender != null) {
+                myContextMenuExtender.accept(popup);
+            }
             popup.setOnHidden(popupEvent -> {
                 popup = null;
             });
@@ -520,6 +528,11 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
                 / ((scrollBar.getMax() - scrollBar.getVisibleAmount()) - scrollBar.getMin());
         var fxValue = scrollBar.getMin() + normalizedValue * (scrollBar.getMax() - scrollBar.getMin());
         return fxValue;
+    }
+
+    private void clampScrollOrigin() {
+        int historyCount = myTerminalTextBuffer.getHistoryLinesCount();
+        swingClientScrollOrigin = Math.max(-historyCount, Math.min(0, swingClientScrollOrigin));
     }
 
     private boolean isFollowLinkEvent(@NotNull MouseEvent e) {
@@ -950,6 +963,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             myTerminalTextBuffer.lock();
             // update myClientScrollOrigin as scrollArea might have been invoked after last WeakRedrawTimer action
             updateScrolling(false);
+            clampScrollOrigin();
             myTerminalTextBuffer.processHistoryAndScreenLines(swingClientScrollOrigin, myTermSize.getRows(),
                     new StyledTextConsumer() {
 
@@ -1810,6 +1824,14 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         return menu;
     }
 
+    /**
+     * Sets an extender that adds custom items to the context menu when it is shown.
+     * Used e.g. by TerminalSplitPane to add Split/Close split items.
+     */
+    public void setContextMenuExtender(@Nullable Consumer<ContextMenu> extender) {
+        myContextMenuExtender = extender;
+    }
+
     private @NotNull TerminalActionProvider getTerminalActionProvider(@Nullable LinkInfo linkInfo, @NotNull MouseEvent e) {
         LinkInfoEx.PopupMenuGroupProvider popupMenuGroupProvider = LinkInfoEx.getPopupMenuGroupProvider(linkInfo);
         if (popupMenuGroupProvider != null) {
@@ -1864,7 +1886,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     @Override
     public List<TerminalAction> getActions() {
-        return List.of(
+        List<TerminalAction> actions = new ArrayList<>(List.of(
                 new TerminalAction(mySettingsProvider.getOpenUrlActionPresentation(), input -> {
                     return openSelectedTextAsURL();
                 }).withEnabledSupplier(this::isSelectedTextUrl),
@@ -1902,7 +1924,23 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
                 new TerminalAction(mySettingsProvider.getLineDownActionPresentation(), input -> {
                     scrollDown();
                     return true;
-                }));
+                })));
+        if (mySettingsProvider instanceof MutableFontSizeProvider) {
+            MutableFontSizeProvider fontProvider = (MutableFontSizeProvider) mySettingsProvider;
+            actions.add(new TerminalAction(new TerminalActionPresentation("Increase font size", Collections.emptyList()), input -> {
+                fontProvider.increaseFontSize(2);
+                return true;
+            }).separatorBefore(true));
+            actions.add(new TerminalAction(new TerminalActionPresentation("Decrease font size", Collections.emptyList()), input -> {
+                fontProvider.decreaseFontSize(2);
+                return true;
+            }));
+            actions.add(new TerminalAction(new TerminalActionPresentation("Reset font size", Collections.emptyList()), input -> {
+                fontProvider.resetFontSize();
+                return true;
+            }));
+        }
+        return actions;
     }
 
     public void selectAll() {
@@ -1969,6 +2007,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
      */
     protected void clearBuffer(boolean keepLastLine) {
         if (!myTerminalTextBuffer.isUsingAlternateBuffer()) {
+            updateSelection(null, true);
             myTerminalTextBuffer.clearHistory();
             if (myCoordsAccessor != null) {
                 if (keepLastLine) {
@@ -1990,6 +2029,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             scrollBar.setValue(scrollBar.getMin());
             updateScrolling(true);
             swingClientScrollOrigin = resolveSwingScrollBarValue();
+            clampScrollOrigin();
         }
     }
 
@@ -2017,17 +2057,21 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             // Handle font zoom shortcuts (Ctrl+Plus/Minus/0 or Cmd+Plus/Minus/0 on Mac)
             if (mySettingsProvider instanceof MutableFontSizeProvider) {
                 MutableFontSizeProvider mutableProvider = (MutableFontSizeProvider) mySettingsProvider;
-                boolean zoomModifier = isMacOS() ? e.isMetaDown() : e.isControlDown();
-                if (zoomModifier && !e.isAltDown() && !e.isShiftDown()) {
-                    final KeyCode keyCode = e.getCode();
-                    if (keyCode == KeyCode.ADD || keyCode == KeyCode.EQUALS) {
+                // Support both Ctrl and Cmd on Mac for cross-platform consistency
+                boolean zoomModifier = e.isControlDown() || e.isMetaDown();
+                final KeyCode keyCode = e.getCode();
+                if (zoomModifier && !e.isAltDown()) {
+                    // Zoom In: ADD (numpad), EQUALS (with or without Shift), PLUS
+                    if (keyCode == KeyCode.ADD || keyCode == KeyCode.EQUALS || keyCode == KeyCode.PLUS) {
                         mutableProvider.increaseFontSize(2);
                         return true;
                     }
+                    // Zoom Out: SUBTRACT, MINUS
                     if (keyCode == KeyCode.SUBTRACT || keyCode == KeyCode.MINUS) {
                         mutableProvider.decreaseFontSize(2);
                         return true;
                     }
+                    // Reset: DIGIT0
                     if (keyCode == KeyCode.DIGIT0) {
                         mutableProvider.resetFontSize();
                         return true;
@@ -2133,8 +2177,12 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         if (hasUncommittedChars()) {
             return false;
         }
-        var keyChar = e.getCharacter().charAt(0);
-        if (e.getCharacter().length() == 0 || !Character.isISOControl((e.getCharacter().codePointAt(0)))) {
+        String character = e.getCharacter();
+        if (character == null || character.isEmpty()) {
+            return false;
+        }
+        var keyChar = character.charAt(0);
+        if (!Character.isISOControl(character.codePointAt(0))) {
             // keys filtered out here will be processed in processTerminalKeyPressed
             try {
                 return processCharacter(e, keyChar);

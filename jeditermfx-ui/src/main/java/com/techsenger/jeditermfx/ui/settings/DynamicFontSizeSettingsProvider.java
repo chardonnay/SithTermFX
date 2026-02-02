@@ -75,6 +75,12 @@ public class DynamicFontSizeSettingsProvider extends DefaultSettingsProvider imp
         return fontSizeProperty.get();
     }
 
+    @Override
+    public boolean supportsDynamicFontSize() {
+        return true;
+    }
+
+
     /**
      * Increases font size by the given delta (e.g. 2). Respects max font size.
      */

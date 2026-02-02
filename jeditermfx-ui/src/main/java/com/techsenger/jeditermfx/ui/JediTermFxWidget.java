@@ -183,6 +183,21 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
         return myTerminalPanel;
     }
 
+    /**
+     * Returns the settings provider used by this widget.
+     */
+    public @NotNull SettingsProvider getSettingsProvider() {
+        return mySettingsProvider;
+    }
+
+    /**
+     * Sets an extender that adds custom items to the terminal's context menu when it is shown.
+     * Used e.g. by TerminalSplitPane to add Split/Close split items.
+     */
+    public void setContextMenuExtender(java.util.function.Consumer<javafx.scene.control.ContextMenu> extender) {
+        myTerminalPanel.setContextMenuExtender(extender);
+    }
+
     public final @NotNull TerminalExecutorServiceManager getExecutorServiceManager() {
         TerminalExecutorServiceManager manager = myExecutorServiceManager;
         if (manager != null) return manager;
