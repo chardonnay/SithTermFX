@@ -19,6 +19,7 @@ import com.techsenger.jeditermfx.core.model.hyperlinks.TextProcessing;
 import com.techsenger.jeditermfx.core.typeahead.TerminalTypeAheadManager;
 import com.techsenger.jeditermfx.core.typeahead.TypeAheadTerminalModel;
 import com.techsenger.jeditermfx.ui.model.DefaultTypeAheadTerminalModel;
+import com.techsenger.jeditermfx.ui.settings.MutableFontSizeProvider;
 import com.techsenger.jeditermfx.ui.settings.SettingsProvider;
 import java.util.HashSet;
 import java.util.List;
@@ -129,6 +130,9 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
                 e.consume();
             }
         });
+        if (mySettingsProvider instanceof MutableFontSizeProvider) {
+            ((MutableFontSizeProvider) mySettingsProvider).addFontSizeListener(() -> myTerminalPanel.requestFontResize());
+        }
         myTerminalPanel.init();
     }
 
@@ -389,6 +393,61 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
 
     public void setNextProvider(TerminalActionProvider actionProvider) {
         this.myNextActionProvider = actionProvider;
+    }
+
+    /**
+     * Sets the font size in points. Only works when using a {@link MutableFontSizeProvider}.
+     * Value is clamped to min/max from settings. Does not disconnect the terminal session.
+     */
+    public void setFontSize(float size) {
+        if (mySettingsProvider instanceof MutableFontSizeProvider) {
+            ((MutableFontSizeProvider) mySettingsProvider).setFontSize(size);
+            myTerminalPanel.requestFontResize();
+        }
+    }
+
+    /**
+     * Increases font size (e.g. by 2pt). Only works when using a {@link MutableFontSizeProvider}.
+     */
+    public void increaseFontSize(float delta) {
+        if (mySettingsProvider instanceof MutableFontSizeProvider) {
+            ((MutableFontSizeProvider) mySettingsProvider).increaseFontSize(delta);
+            myTerminalPanel.requestFontResize();
+        }
+    }
+
+    /**
+     * Decreases font size (e.g. by 2pt). Only works when using a {@link MutableFontSizeProvider}.
+     */
+    public void decreaseFontSize(float delta) {
+        if (mySettingsProvider instanceof MutableFontSizeProvider) {
+            ((MutableFontSizeProvider) mySettingsProvider).decreaseFontSize(delta);
+            myTerminalPanel.requestFontResize();
+        }
+    }
+
+    /**
+     * Resets font size to default. Only works when using a {@link MutableFontSizeProvider}.
+     */
+    public void resetFontSize() {
+        if (mySettingsProvider instanceof MutableFontSizeProvider) {
+            ((MutableFontSizeProvider) mySettingsProvider).resetFontSize();
+            myTerminalPanel.requestFontResize();
+        }
+    }
+
+    /**
+     * Gets the minimum font size from settings.
+     */
+    public float getMinFontSize() {
+        return mySettingsProvider.getMinFontSize();
+    }
+
+    /**
+     * Gets the maximum font size from settings.
+     */
+    public float getMaxFontSize() {
+        return mySettingsProvider.getMaxFontSize();
     }
 
     private static class Session {

@@ -31,11 +31,13 @@ import com.techsenger.jeditermfx.core.model.TerminalTextBuffer;
 import com.techsenger.jeditermfx.core.model.hyperlinks.LinkInfo;
 import com.techsenger.jeditermfx.core.typeahead.TerminalTypeAheadManager;
 import com.techsenger.jeditermfx.core.util.CharUtils;
+import static com.techsenger.jeditermfx.core.util.Platform.isMacOS;
 import static com.techsenger.jeditermfx.core.util.Platform.isWindows;
 import com.techsenger.jeditermfx.core.util.TermSize;
 import com.techsenger.jeditermfx.ui.hyperlinks.LinkInfoEx;
 import com.techsenger.jeditermfx.ui.input.FxMouseEvent;
 import com.techsenger.jeditermfx.ui.input.FxMouseWheelEvent;
+import com.techsenger.jeditermfx.ui.settings.MutableFontSizeProvider;
 import com.techsenger.jeditermfx.ui.settings.SettingsProvider;
 import java.awt.Desktop;
 import java.awt.EventQueue;
@@ -299,6 +301,14 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     protected void reinitFontAndResize() {
         initFont();
         sizeTerminalFromComponent();
+    }
+
+    /**
+     * Public method to request font reinitialization and terminal resize.
+     * Used when font size is changed dynamically (e.g. via Ctrl+Plus/Minus).
+     */
+    public void requestFontResize() {
+        reinitFontAndResize();
     }
 
     protected void initFont() {
@@ -2004,6 +2014,26 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             return false;
         }
         try {
+            // Handle font zoom shortcuts (Ctrl+Plus/Minus/0 or Cmd+Plus/Minus/0 on Mac)
+            if (mySettingsProvider instanceof MutableFontSizeProvider) {
+                MutableFontSizeProvider mutableProvider = (MutableFontSizeProvider) mySettingsProvider;
+                boolean zoomModifier = isMacOS() ? e.isMetaDown() : e.isControlDown();
+                if (zoomModifier && !e.isAltDown() && !e.isShiftDown()) {
+                    final KeyCode keyCode = e.getCode();
+                    if (keyCode == KeyCode.ADD || keyCode == KeyCode.EQUALS) {
+                        mutableProvider.increaseFontSize(2);
+                        return true;
+                    }
+                    if (keyCode == KeyCode.SUBTRACT || keyCode == KeyCode.MINUS) {
+                        mutableProvider.decreaseFontSize(2);
+                        return true;
+                    }
+                    if (keyCode == KeyCode.DIGIT0) {
+                        mutableProvider.resetFontSize();
+                        return true;
+                    }
+                }
+            }
             final KeyCode keyCode = e.getCode();
             // numLock does not change the code sent by keypad VK_DELETE
             // although it send the char '.'

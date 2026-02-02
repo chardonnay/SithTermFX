@@ -13,4 +13,5 @@ module com.techsenger.jeditermfx.ui {
 
     exports com.techsenger.jeditermfx.ui;
     exports com.techsenger.jeditermfx.ui.settings;
+    exports com.techsenger.jeditermfx.ui.split;
 }

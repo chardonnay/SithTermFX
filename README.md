@@ -17,6 +17,8 @@ any JavaFX application. A detailed comparison of terminal libraries is provided 
 * [Usage](#usage)
     * [Dependencies](#usage-dependencies)
     * [Dark Theme](#usage-dark-theme)
+    * [Dynamic Font Size](#usage-font-size)
+    * [Split Screen](#usage-split-screen)
     * [Hyperlinks](#usage-hyperlinks)
 * [Code building](#code-building)
 * [Running the Application](#application)
@@ -58,6 +60,8 @@ any JavaFX application. A detailed comparison of terminal libraries is provided 
 * Mouse support
 * Terminal resizing from client or server side
 * Terminal tabs
+* **Dynamic font size** - Adjust font size at runtime via Ctrl+Plus/Minus (Cmd+Plus/Minus on Mac) without disconnecting
+* **Split screen** - Nested horizontal/vertical splits with independent sessions per pane
 
 ## Terminal Comparison <a name="comparison"></a>
 
@@ -95,6 +99,28 @@ This project is available on Maven Central:
 
 If you need a dark theme, you should override the `getDefaultForeground()` and `getDefaultBackground()` methods in
 `UserSettingsProvider`. To run the demo application in dark theme see [Using Maven](#application-maven).
+
+### Dynamic Font Size <a name="usage-font-size"></a>
+
+Use `DynamicFontSizeSettingsProvider` (or extend it) to enable runtime font resizing without disconnecting the terminal:
+
+* **Ctrl+Plus** / **Ctrl+Minus** (Cmd on Mac) - Increase/decrease font size
+* **Ctrl+0** (Cmd+0 on Mac) - Reset to default size
+
+Font size range is configurable via `getMinFontSize()` and `getMaxFontSize()` in `UserSettingsProvider` (default 8–72 pt).
+
+### Split Screen <a name="usage-split-screen"></a>
+
+Use `TerminalSplitPane` for nested horizontal/vertical splits. Right-click in the terminal to access the context menu:
+
+* **Split right (same server)** / **Split right (new connection)** - Split horizontally
+* **Split down (same server)** / **Split down (new connection)** - Split vertically
+* **Close split** - Close the focused pane
+
+Implement `SplitConnectorFactory` to provide new `TtyConnector` instances. The `SplitRequest` contains the chosen mode
+(SAME_SERVER_NEW_SHELL vs NEW_CONNECTION) and the parent widget for reusing connections.
+
+See [SplitTerminalShellExample](jeditermfx-app/src/main/java/com/techsenger/jeditermfx/app/example/SplitTerminalShellExample.java) for a demo.
 
 ### Hyperlinks <a name="usage-hyperlinks"></a>
 

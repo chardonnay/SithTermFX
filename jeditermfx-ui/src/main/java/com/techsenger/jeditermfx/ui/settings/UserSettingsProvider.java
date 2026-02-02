@@ -17,6 +17,20 @@ public interface UserSettingsProvider {
     float getTerminalFontSize();
 
     /**
+     * @return minimum font size in points (for zoom)
+     */
+    default float getMinFontSize() {
+        return 8;
+    }
+
+    /**
+     * @return maximum font size in points (for zoom)
+     */
+    default float getMaxFontSize() {
+        return 72;
+    }
+
+    /**
      * @return vertical scaling factor
      */
     default float getLineSpacing() {
