@@ -62,6 +62,7 @@ any JavaFX application. A detailed comparison of terminal libraries is provided 
 * Terminal tabs
 * **Dynamic font size** - Adjust font size at runtime via Ctrl+Plus/Minus (Cmd+Plus/Minus on Mac) without disconnecting
 * **Split screen** - Nested horizontal/vertical splits with independent sessions per pane
+* **Reorder split panes** - Drag a split terminal onto another to move it above, below, left, or right; drop zones show possible positions while dragging
 
 ## Terminal Comparison <a name="comparison"></a>
 
@@ -117,6 +118,8 @@ Use `TerminalSplitPane` for nested horizontal/vertical splits. Right-click in th
 * **Split down (same server)** / **Split down (new connection)** - Split vertically
 * **Close split** - Close the focused pane
 
+**Reorder panes by drag-and-drop:** Drag a split terminal with the mouse onto another pane. While dragging, four drop zones (above, below, left, right) are shown; the zone under the cursor is highlighted. Release to move the pane to that position.
+
 Implement `SplitConnectorFactory` to provide new `TtyConnector` instances. The `SplitRequest` contains the chosen mode
 (SAME_SERVER_NEW_SHELL vs NEW_CONNECTION) and the parent widget for reusing connections.
 
@@ -145,13 +148,21 @@ The project contains a demo application that shows how to use this library. Ther
 
 ### Using Maven <a name="application-maven"></a>
 
-To run application using maven plugin execute the following commands in the root of the project:
+Build the project from the root first (required so all modules are available on the classpath):
 
-    cd jeditermfx-app
-    mvn javafx:run
+    git clone https://github.com/techsenger/jeditermfx
+    cd jeditermfx
+    mvn clean install
 
-Please note, that debugger settings are in `jeditermfx-app/pom.xml` file. If you want to try a dark theme,
-uncomment the following line in the JavaFX plugin configuration in the pom.xml file:
+Then run the main application:
+
+    mvn javafx:run -pl jeditermfx-app
+
+To run the **Split Terminal** demo (nested splits and drag-and-drop reordering):
+
+    mvn javafx:run -pl jeditermfx-app -Psplit
+
+Debugger settings are in `jeditermfx-app/pom.xml`. To try a dark theme, uncomment the following line in the JavaFX plugin configuration:
 
 ```
 <!--<commandlineArgs>theme=dark</commandlineArgs>-->

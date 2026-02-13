@@ -10,20 +10,26 @@ import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.input.DataFormat;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javafx.scene.layout.Pane;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -36,6 +42,25 @@ import java.util.function.Consumer;
 public class TerminalSplitPane extends StackPane {
 
     private static final Logger logger = LoggerFactory.getLogger(TerminalSplitPane.class);
+
+    /** DataFormat for drag-and-drop of terminal widgets (value: identity hash as string). */
+    private static final DataFormat DRAG_TERMINAL_FORMAT = new DataFormat("application/x-jeditermfx-terminal-widget");
+
+    /** Drop placement when moving a split terminal. */
+    public enum Placement {
+        ABOVE, BELOW, LEFT_OF, RIGHT_OF
+    }
+
+    /** Result of extracting a widget cell from the tree (without closing it). */
+    private static final class ExtractResult {
+        final TerminalSplitPane.SplitCell extracted;
+        final TerminalSplitPane.SplitCell replacement;
+
+        ExtractResult(TerminalSplitPane.SplitCell extracted, TerminalSplitPane.SplitCell replacement) {
+            this.extracted = extracted;
+            this.replacement = replacement;
+        }
+    }
 
     /** Control sequences used in KEY_PRESSED; skip these in KEY_TYPED to avoid duplicate broadcast. */
     private static final String BACK_SPACE_CONTROL_SEQUENCE = "\u007F";
@@ -70,6 +95,7 @@ public class TerminalSplitPane extends StackPane {
         this.rootCell = createInitialCell();
         getChildren().add(rootCell.getNode());
         VBox.setVgrow(this, Priority.ALWAYS);
+        refreshDragAndDrop();
     }
     
     /**
@@ -280,17 +306,15 @@ public class TerminalSplitPane extends StackPane {
             rootCell = replacement;
             getChildren().add(rootCell.getNode());
             VBox.setVgrow(rootCell.getNode(), Priority.ALWAYS);
+            refreshDragAndDrop();
         }
     }
 
     private void closeSplit(@NotNull JediTermFxWidget widget) {
-        widget.close();
-        if (widget.getTtyConnector() != null) {
-            try {
-                widget.getTtyConnector().close();
-            } catch (Exception e) {
-                logger.debug("Error closing connector: {}", e.getMessage());
-            }
+        try {
+            widget.close();
+        } catch (Exception e) {
+            logger.debug("Error closing widget: {}", e.getMessage());
         }
         SplitCell replacement = rootCell.removeWidget(widget);
         if (replacement != rootCell) {
@@ -301,7 +325,112 @@ public class TerminalSplitPane extends StackPane {
                 VBox.setVgrow(rootCell.getNode(), Priority.ALWAYS);
             }
             focusedWidget = rootCell != null ? findFirstWidget(rootCell) : null;
+            refreshDragAndDrop();
         }
+    }
+
+    /**
+     * Moves a split terminal to a new position relative to another (e.g. above, below, left, right).
+     * Does nothing if there is only one widget or if source equals target.
+     */
+    public void moveWidget(@NotNull JediTermFxWidget source, @NotNull JediTermFxWidget target,
+                           @NotNull Placement placement) {
+        if (rootCell == null || getWidgetCount() <= 1 || source == target) {
+            return;
+        }
+        ExtractResult er = rootCell.extractWidget(source);
+        if (er == null || er.replacement == null) {
+            return;
+        }
+        Orientation orientation;
+        boolean newCellFirst;
+        switch (placement) {
+            case ABOVE:   orientation = Orientation.VERTICAL;   newCellFirst = true;  break;
+            case BELOW:   orientation = Orientation.VERTICAL;   newCellFirst = false; break;
+            case LEFT_OF: orientation = Orientation.HORIZONTAL; newCellFirst = true;  break;
+            case RIGHT_OF: orientation = Orientation.HORIZONTAL; newCellFirst = false; break;
+            default: return;
+        }
+        SplitCell newRoot = er.replacement.replaceWidget(target, er.extracted, orientation, newCellFirst);
+        if (newRoot == null) {
+            return;
+        }
+        getChildren().clear();
+        rootCell = newRoot;
+        getChildren().add(rootCell.getNode());
+        VBox.setVgrow(rootCell.getNode(), Priority.ALWAYS);
+        refreshDragAndDrop();
+    }
+
+    /** Walks all leaf cells (widget wrappers) in the tree. */
+    private void forEachLeafCell(@Nullable SplitCell cell, @NotNull java.util.function.Consumer<SplitCell> action) {
+        if (cell == null) return;
+        if (cell.widget != null) {
+            action.accept(cell);
+            return;
+        }
+        forEachLeafCell(cell.leftCell, action);
+        forEachLeafCell(cell.rightCell, action);
+    }
+
+    /** (Re-)attaches drag source and drop target handlers to all terminal wrappers. */
+    private void refreshDragAndDrop() {
+        forEachLeafCell(rootCell, this::attachDragAndDropToCell);
+    }
+
+    private @Nullable JediTermFxWidget findWidgetByIdentity(@NotNull String idString) {
+        int id;
+        try {
+            id = Integer.parseInt(idString);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        for (JediTermFxWidget w : getAllWidgets()) {
+            if (System.identityHashCode(w) == id) return w;
+        }
+        return null;
+    }
+
+    private void attachDragAndDropToCell(@NotNull SplitCell cell) {
+        Region node = cell.getNode();
+        JediTermFxWidget widget = cell.widget;
+        if (widget == null) return;
+
+        node.setOnDragDetected(event -> {
+            if (getWidgetCount() <= 1) return;
+            Dragboard db = node.startDragAndDrop(TransferMode.MOVE);
+            db.setContent(Map.of(DRAG_TERMINAL_FORMAT, String.valueOf(System.identityHashCode(widget))));
+            event.consume();
+        });
+
+        node.setOnDragEntered(event -> {
+            if (!event.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) return;
+            String sourceId = (String) event.getDragboard().getContent(DRAG_TERMINAL_FORMAT);
+            if (sourceId.equals(String.valueOf(System.identityHashCode(widget)))) return;
+            JediTermFxWidget source = findWidgetByIdentity(sourceId);
+            if (source == null) return;
+            DropZoneOverlay.show(node, widget, sourceId, this);
+            event.consume();
+        });
+
+        node.setOnDragExited(event -> {
+            DropZoneOverlay.hide(node);
+            event.consume();
+        });
+
+        node.setOnDragOver(event -> {
+            if (event.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) {
+                event.acceptTransferModes(TransferMode.MOVE);
+                DropZoneOverlay.updatePlacement(node, event.getX(), event.getY());
+            }
+            event.consume();
+        });
+
+        node.setOnDragDropped(event -> {
+            boolean done = DropZoneOverlay.tryDrop(node, this);
+            event.setDropCompleted(done);
+            event.consume();
+        });
     }
 
     /**
@@ -394,6 +523,7 @@ public class TerminalSplitPane extends StackPane {
             wrapper.setMinSize(0, 0);
             wrapper.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
             VBox.setVgrow(wrapper, Priority.ALWAYS);
+            wrapper.setUserData(widget);
             this.node = wrapper;
         }
 
@@ -429,17 +559,53 @@ public class TerminalSplitPane extends StackPane {
         @Nullable
         SplitCell replaceWidget(@NotNull JediTermFxWidget target, @NotNull SplitCell newCell,
                                @NotNull Orientation orientation) {
+            return replaceWidget(target, newCell, orientation, false);
+        }
+
+        /** Replaces target with a split (target + newCell). If newCellFirst, order is (newCell, target). */
+        @Nullable
+        SplitCell replaceWidget(@NotNull JediTermFxWidget target, @NotNull SplitCell newCell,
+                               @NotNull Orientation orientation, boolean newCellFirst) {
             if (widget == target) {
-                return new SplitCell(this, newCell, orientation);
+                return newCellFirst
+                        ? new SplitCell(newCell, this, orientation)
+                        : new SplitCell(this, newCell, orientation);
             }
             if (leftCell != null && rightCell != null) {
-                SplitCell newLeft = leftCell.replaceWidget(target, newCell, orientation);
+                SplitCell newLeft = leftCell.replaceWidget(target, newCell, orientation, newCellFirst);
                 if (newLeft != null) {
                     return new SplitCell(newLeft, rightCell, splitPane.getOrientation());
                 }
-                SplitCell newRight = rightCell.replaceWidget(target, newCell, orientation);
+                SplitCell newRight = rightCell.replaceWidget(target, newCell, orientation, newCellFirst);
                 if (newRight != null) {
                     return new SplitCell(leftCell, newRight, splitPane.getOrientation());
+                }
+            }
+            return null;
+        }
+
+        /** Extracts the cell containing target from the tree without closing it. Returns null if not found. */
+        @Nullable
+        ExtractResult extractWidget(@NotNull JediTermFxWidget target) {
+            if (widget == target) {
+                return new ExtractResult(this, null);
+            }
+            if (leftCell != null && rightCell != null) {
+                ExtractResult leftResult = leftCell.extractWidget(target);
+                if (leftResult != null) {
+                    SplitCell newLeft = leftResult.replacement;
+                    if (newLeft == null) {
+                        return new ExtractResult(leftResult.extracted, rightCell);
+                    }
+                    return new ExtractResult(leftResult.extracted, new SplitCell(newLeft, rightCell, splitPane.getOrientation()));
+                }
+                ExtractResult rightResult = rightCell.extractWidget(target);
+                if (rightResult != null) {
+                    SplitCell newRight = rightResult.replacement;
+                    if (newRight == null) {
+                        return new ExtractResult(rightResult.extracted, leftCell);
+                    }
+                    return new ExtractResult(rightResult.extracted, new SplitCell(leftCell, newRight, splitPane.getOrientation()));
                 }
             }
             return null;
@@ -477,13 +643,10 @@ public class TerminalSplitPane extends StackPane {
 
         void closeAll() {
             if (widget != null) {
-                widget.close();
-                if (widget.getTtyConnector() != null) {
-                    try {
-                        widget.getTtyConnector().close();
-                    } catch (Exception e) {
-                        logger.debug("Error closing: {}", e.getMessage());
-                    }
+                try {
+                    widget.close();
+                } catch (Exception e) {
+                    logger.debug("Error closing widget: {}", e.getMessage());
                 }
             }
             if (leftCell != null) leftCell.closeAll();
@@ -503,5 +666,138 @@ public class TerminalSplitPane extends StackPane {
             return findFirstWidget(cell.rightCell);
         }
         return null;
+    }
+
+    /**
+     * Overlay shown over a terminal wrapper during drag, with four drop zones (above, below, left, right).
+     * Stored in the wrapper's properties under this key.
+     */
+    private static final String DROP_ZONE_OVERLAY_KEY = "jeditermfx.dropZoneOverlay";
+
+    private static final class DropZoneOverlay {
+        private final Pane pane;
+        private final Region wrapper;
+        private final JediTermFxWidget targetWidget;
+        private final String sourceId;
+        private final TerminalSplitPane splitPane;
+        private Placement currentPlacement;
+        private final Region zoneAbove;
+        private final Region zoneBelow;
+        private final Region zoneLeft;
+        private final Region zoneRight;
+
+        private static final String STYLE_ZONE = "-fx-background-color: rgba(64,128,255,0.25);";
+        private static final String STYLE_ZONE_HIGHLIGHT = "-fx-background-color: rgba(64,128,255,0.5);";
+
+        DropZoneOverlay(Region wrapper, JediTermFxWidget targetWidget, String sourceId, TerminalSplitPane splitPane) {
+            this.wrapper = wrapper;
+            this.targetWidget = targetWidget;
+            this.sourceId = sourceId;
+            this.splitPane = splitPane;
+            this.pane = new Pane();
+            pane.setMinSize(0, 0);
+            pane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+            pane.setPickOnBounds(true);
+            zoneAbove = new Region();
+            zoneBelow = new Region();
+            zoneLeft = new Region();
+            zoneRight = new Region();
+            zoneAbove.setStyle(STYLE_ZONE);
+            zoneBelow.setStyle(STYLE_ZONE);
+            zoneLeft.setStyle(STYLE_ZONE);
+            zoneRight.setStyle(STYLE_ZONE);
+            pane.getChildren().addAll(zoneAbove, zoneBelow, zoneLeft, zoneRight);
+            currentPlacement = null;
+            pane.widthProperty().addListener((o, a, b) -> layoutZones());
+            pane.heightProperty().addListener((o, a, b) -> layoutZones());
+        }
+
+        private void layoutZones() {
+            double w = pane.getWidth();
+            double h = pane.getHeight();
+            if (w <= 0 || h <= 0) return;
+            double topH = h * 0.25;
+            double bottomH = h * 0.25;
+            double leftW = w * 0.25;
+            double rightW = w * 0.25;
+            double midH = h - topH - bottomH;
+            zoneAbove.resizeRelocate(0, 0, w, topH);
+            zoneBelow.resizeRelocate(0, h - bottomH, w, bottomH);
+            zoneLeft.resizeRelocate(0, topH, leftW, midH);
+            zoneRight.resizeRelocate(w - rightW, topH, rightW, midH);
+        }
+
+        void updatePlacement(double x, double y) {
+            double w = wrapper.getWidth();
+            double h = wrapper.getHeight();
+            if (w <= 0 || h <= 0) return;
+            Placement next = null;
+            if (y < h * 0.25) next = Placement.ABOVE;
+            else if (y > h * 0.75) next = Placement.BELOW;
+            else if (x < w * 0.25) next = Placement.LEFT_OF;
+            else if (x > w * 0.75) next = Placement.RIGHT_OF;
+            if (next != currentPlacement) {
+                currentPlacement = next;
+                zoneAbove.setStyle(next == Placement.ABOVE ? STYLE_ZONE_HIGHLIGHT : STYLE_ZONE);
+                zoneBelow.setStyle(next == Placement.BELOW ? STYLE_ZONE_HIGHLIGHT : STYLE_ZONE);
+                zoneLeft.setStyle(next == Placement.LEFT_OF ? STYLE_ZONE_HIGHLIGHT : STYLE_ZONE);
+                zoneRight.setStyle(next == Placement.RIGHT_OF ? STYLE_ZONE_HIGHLIGHT : STYLE_ZONE);
+            }
+        }
+
+        boolean tryDrop() {
+            if (currentPlacement == null) return false;
+            JediTermFxWidget source = splitPane.findWidgetByIdentity(sourceId);
+            if (source == null) return false;
+            splitPane.moveWidget(source, targetWidget, currentPlacement);
+            return true;
+        }
+
+        static void show(Region wrapper, JediTermFxWidget targetWidget, String sourceId, TerminalSplitPane splitPane) {
+            hide(wrapper);
+            DropZoneOverlay overlay = new DropZoneOverlay(wrapper, targetWidget, sourceId, splitPane);
+            wrapper.getProperties().put(DROP_ZONE_OVERLAY_KEY, overlay);
+            if (wrapper instanceof StackPane) {
+                overlay.pane.setOnDragOver(e -> {
+                    if (e.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) {
+                        e.acceptTransferModes(TransferMode.MOVE);
+                        updatePlacement(wrapper, e.getX(), e.getY());
+                    }
+                    e.consume();
+                });
+                overlay.pane.setOnDragDropped(e -> {
+                    boolean done = tryDrop(wrapper, splitPane);
+                    e.setDropCompleted(done);
+                    e.consume();
+                });
+                ((StackPane) wrapper).getChildren().add(overlay.pane);
+                Platform.runLater(overlay::layoutZones);
+            }
+        }
+
+        static void hide(Region wrapper) {
+            Object old = wrapper.getProperties().remove(DROP_ZONE_OVERLAY_KEY);
+            if (old instanceof DropZoneOverlay && wrapper instanceof StackPane) {
+                ((StackPane) wrapper).getChildren().remove(((DropZoneOverlay) old).pane);
+            }
+        }
+
+        static void updatePlacement(Region wrapper, double x, double y) {
+            Object o = wrapper.getProperties().get(DROP_ZONE_OVERLAY_KEY);
+            if (o instanceof DropZoneOverlay) {
+                ((DropZoneOverlay) o).updatePlacement(x, y);
+            }
+        }
+
+        static boolean tryDrop(Region wrapper, TerminalSplitPane splitPane) {
+            Object o = wrapper.getProperties().get(DROP_ZONE_OVERLAY_KEY);
+            if (o instanceof DropZoneOverlay) {
+                DropZoneOverlay overlay = (DropZoneOverlay) o;
+                boolean ok = overlay.tryDrop();
+                hide(wrapper);
+                return ok;
+            }
+            return false;
+        }
     }
 }

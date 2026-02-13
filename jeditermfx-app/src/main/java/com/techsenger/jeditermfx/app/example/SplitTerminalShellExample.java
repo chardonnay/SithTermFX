@@ -75,6 +75,8 @@ public class SplitTerminalShellExample extends Application {
         splitPane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         stage.setScene(scene);
         stage.show();
+        stage.toFront();
+        stage.requestFocus();
     }
 
     private @Nullable TtyConnector createTtyConnector() {

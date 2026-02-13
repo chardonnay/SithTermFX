@@ -9,3 +9,13 @@
 .split-pane:vertical > .split-pane-divider {
     -fx-cursor: row-resize;
 }
+
+/* Drop zones when dragging a split terminal to reorder */
+.split-drop-zone {
+    -fx-background-color: rgba(64, 128, 255, 0.25);
+    -fx-cursor: default;
+}
+.split-drop-zone:hover,
+.split-drop-zone.highlight {
+    -fx-background-color: rgba(64, 128, 255, 0.5);
+}

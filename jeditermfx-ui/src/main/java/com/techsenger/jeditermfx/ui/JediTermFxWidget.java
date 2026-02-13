@@ -421,11 +421,11 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
     /**
      * Sets the font size in points. Only works when using a {@link MutableFontSizeProvider}.
      * Value is clamped to min/max from settings. Does not disconnect the terminal session.
+     * Resize is performed by the existing fontSizeListener when the provider's size changes.
      */
     public void setFontSize(float size) {
         if (mySettingsProvider instanceof MutableFontSizeProvider) {
             ((MutableFontSizeProvider) mySettingsProvider).setFontSize(size);
-            myTerminalPanel.requestFontResize();
         }
     }
 
@@ -435,7 +435,6 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
     public void increaseFontSize(float delta) {
         if (mySettingsProvider instanceof MutableFontSizeProvider) {
             ((MutableFontSizeProvider) mySettingsProvider).increaseFontSize(delta);
-            myTerminalPanel.requestFontResize();
         }
     }
 
@@ -445,7 +444,6 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
     public void decreaseFontSize(float delta) {
         if (mySettingsProvider instanceof MutableFontSizeProvider) {
             ((MutableFontSizeProvider) mySettingsProvider).decreaseFontSize(delta);
-            myTerminalPanel.requestFontResize();
         }
     }
 
@@ -455,7 +453,6 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
     public void resetFontSize() {
         if (mySettingsProvider instanceof MutableFontSizeProvider) {
             ((MutableFontSizeProvider) mySettingsProvider).resetFontSize();
-            myTerminalPanel.requestFontResize();
         }
     }
 
