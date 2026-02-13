@@ -2,37 +2,42 @@ package com.techsenger.jeditermfx.ui.split;
 
 import com.techsenger.jeditermfx.core.TtyConnector;
 import com.techsenger.jeditermfx.ui.JediTermFxWidget;
+import com.techsenger.jeditermfx.ui.TerminalWidgetListener;
 import com.techsenger.jeditermfx.ui.settings.SettingsProvider;
 import javafx.application.Platform;
 import javafx.geometry.Orientation;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
+import javafx.scene.input.DataFormat;
 import javafx.scene.input.Dragboard;
+import javafx.scene.input.DragEvent;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.input.DataFormat;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javafx.scene.layout.Pane;
-
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.Function;
+
+import javafx.scene.layout.HBox;
 
 /**
  * Pane that supports splitting terminal widgets horizontally or vertically.
@@ -43,7 +48,6 @@ public class TerminalSplitPane extends StackPane {
 
     private static final Logger logger = LoggerFactory.getLogger(TerminalSplitPane.class);
 
-    /** DataFormat for drag-and-drop of terminal widgets (value: identity hash as string). */
     private static final DataFormat DRAG_TERMINAL_FORMAT = new DataFormat("application/x-jeditermfx-terminal-widget");
 
     /** Drop placement when moving a split terminal. */
@@ -51,73 +55,82 @@ public class TerminalSplitPane extends StackPane {
         ABOVE, BELOW, LEFT_OF, RIGHT_OF
     }
 
-    /** Result of extracting a widget cell from the tree (without closing it). */
     private static final class ExtractResult {
-        final TerminalSplitPane.SplitCell extracted;
-        final TerminalSplitPane.SplitCell replacement;
+        final SplitCell extracted;
+        final SplitCell replacement;
 
-        ExtractResult(TerminalSplitPane.SplitCell extracted, TerminalSplitPane.SplitCell replacement) {
+        ExtractResult(SplitCell extracted, SplitCell replacement) {
             this.extracted = extracted;
             this.replacement = replacement;
         }
     }
 
-    /** Control sequences used in KEY_PRESSED; skip these in KEY_TYPED to avoid duplicate broadcast. */
-    private static final String BACK_SPACE_CONTROL_SEQUENCE = "\u007F";
-    private static final String DELETE_CONTROL_SEQUENCE = "\u001B[3~";
-
     private final SettingsProvider settingsProvider;
     private final SplitConnectorFactory connectorFactory;
     private final Consumer<JediTermFxWidget> widgetConfigurator;
+    private final Function<JediTermFxWidget, Region> leftPanelFactory;
 
     private SplitCell rootCell;
     private JediTermFxWidget focusedWidget;
     private boolean broadcastMode = false;
 
-    /** Executor for broadcasting key input to other connectors off the JavaFX thread. */
-    private final ExecutorService broadcastExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "TerminalSplitPane-broadcast");
-        t.setDaemon(true);
-        return t;
-    });
+    // Optional left-side panels (e.g. timestamp gutters) per widget
+    private final Map<JediTermFxWidget, Region> widgetLeftPanels = new HashMap<>();
+
+    // Track the currently showing context menu so we can hide it properly
+    private ContextMenu activeContextMenu;
+
+    // Optional supplier of extra menu items to add to the context menu (e.g. timestamp toggle)
+    private Function<JediTermFxWidget, List<MenuItem>> extraMenuItemsFactory;
 
     public TerminalSplitPane(@NotNull SettingsProvider settingsProvider,
                              @NotNull SplitConnectorFactory connectorFactory) {
-        this(settingsProvider, connectorFactory, w -> {});
+        this(settingsProvider, connectorFactory, w -> {}, null);
     }
 
     public TerminalSplitPane(@NotNull SettingsProvider settingsProvider,
                              @NotNull SplitConnectorFactory connectorFactory,
                              @NotNull Consumer<JediTermFxWidget> widgetConfigurator) {
+        this(settingsProvider, connectorFactory, widgetConfigurator, null);
+    }
+
+    public TerminalSplitPane(@NotNull SettingsProvider settingsProvider,
+                             @NotNull SplitConnectorFactory connectorFactory,
+                             @NotNull Consumer<JediTermFxWidget> widgetConfigurator,
+                             @Nullable Function<JediTermFxWidget, Region> leftPanelFactory) {
         this.settingsProvider = settingsProvider;
         this.connectorFactory = connectorFactory;
         this.widgetConfigurator = widgetConfigurator;
+        this.leftPanelFactory = leftPanelFactory;
         this.rootCell = createInitialCell();
         getChildren().add(rootCell.getNode());
         VBox.setVgrow(this, Priority.ALWAYS);
+        // Only allow pane-move drag with Shift+Alt/Option.
+        addEventFilter(MouseEvent.DRAG_DETECTED, event -> {
+            if (rootCell == null || rootCell.countWidgets() <= 1) return;
+            if (!(event.isShiftDown() && event.isAltDown())) {
+                event.consume();
+            }
+        });
         refreshDragAndDrop();
     }
     
     /**
      * Broadcasts input to all OTHER widgets (not the source widget).
-     * Writes are offloaded to a background executor to avoid blocking the JavaFX thread.
      */
     private void broadcastToOthers(@NotNull JediTermFxWidget sourceWidget, @NotNull String data) {
         if (!broadcastMode) return;
-
+        
         List<JediTermFxWidget> allWidgets = getAllWidgets();
         for (JediTermFxWidget widget : allWidgets) {
             if (widget != sourceWidget) {
                 TtyConnector connector = widget.getTtyConnector();
                 if (connector != null && connector.isConnected()) {
-                    final TtyConnector c = connector;
-                    broadcastExecutor.submit(() -> {
-                        try {
-                            c.write(data);
-                        } catch (IOException e) {
-                            logger.debug("Failed to broadcast to widget: {}", e.getMessage());
-                        }
-                    });
+                    try {
+                        connector.write(data);
+                    } catch (IOException e) {
+                        logger.debug("Failed to broadcast to widget: {}", e.getMessage());
+                    }
                 }
             }
         }
@@ -126,7 +139,7 @@ public class TerminalSplitPane extends StackPane {
     private @Nullable String getControlSequence(KeyEvent event) {
         switch (event.getCode()) {
             case ENTER: return "\r";
-            case BACK_SPACE: return BACK_SPACE_CONTROL_SEQUENCE;
+            case BACK_SPACE: return "\u007F";
             case TAB: return "\t";
             case ESCAPE: return "\u001B";
             case UP: return "\u001B[A";
@@ -138,7 +151,7 @@ public class TerminalSplitPane extends StackPane {
             case PAGE_UP: return "\u001B[5~";
             case PAGE_DOWN: return "\u001B[6~";
             case INSERT: return "\u001B[2~";
-            case DELETE: return DELETE_CONTROL_SEQUENCE;
+            case DELETE: return "\u001B[3~";
             case F1: return "\u001BOP";
             case F2: return "\u001BOQ";
             case F3: return "\u001BOR";
@@ -158,6 +171,7 @@ public class TerminalSplitPane extends StackPane {
     private @NotNull SplitCell createInitialCell() {
         JediTermFxWidget widget = createWidget(null);
         setupWidget(widget);
+        applyLeftPanel(widget);
         return new SplitCell(widget);
     }
 
@@ -184,7 +198,23 @@ public class TerminalSplitPane extends StackPane {
                 focusedWidget = widget;
             }
         });
-        widget.setContextMenuExtender(menu -> addSplitMenuItems(menu, widget));
+        // Auto-close split when session ends (e.g. Ctrl+D / exit)
+        // Only closes the split pane if there is more than one widget;
+        // if it's the last widget, the tab-level disconnect handler takes care of closing.
+        widget.addListener(new TerminalWidgetListener() {
+            @Override
+            public void allSessionsClosed(com.techsenger.jeditermfx.ui.TerminalWidget w) {
+                Platform.runLater(() -> {
+                    if (rootCell != null && rootCell.countWidgets() > 1) {
+                        logger.info("Session closed in split widget, auto-closing split pane");
+                        closeSplit(widget);
+                    }
+                });
+            }
+        });
+        
+        // Add split menu via right-click on the widget pane
+        setupContextMenu(widget);
         
         // Broadcast mode: register event filters on the WIDGET'S OUTER PANE
         // This is the outermost container (myInnerPanel), ensuring our filter runs 
@@ -194,14 +224,16 @@ public class TerminalSplitPane extends StackPane {
         widgetPane.addEventFilter(KeyEvent.KEY_TYPED, event -> {
             if (!broadcastMode) return;
             String character = event.getCharacter();
-            if (character == null || character.isEmpty()) return;
-            // Skip single-char control sequences that KEY_PRESSED also sends (getControlSequence), to avoid duplicate broadcast.
-            // getCharacter() yields only single characters; DELETE uses multi-char "\u001B[3~" so it is not seen here.
-            if (character.equals(BACK_SPACE_CONTROL_SEQUENCE) || character.equals("\r")
-                    || character.equals("\t") || character.equals("\u001B")) {
-                return;
+            if (character != null && !character.isEmpty()) {
+                char c = character.charAt(0);
+                // Only skip specific control characters that are handled in KEY_PRESSED:
+                // \r (13) = ENTER, \t (9) = TAB, \u001B (27) = ESC, \u007F (127) = DEL
+                // All other control characters (like Ctrl+L = \u000C) should pass through
+                if (c == '\r' || c == '\t' || c == '\u001B' || c == '\u007F') {
+                    return;
+                }
+                broadcastToOthers(widget, character);
             }
-            broadcastToOthers(widget, character);
         });
         
         widgetPane.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
@@ -213,54 +245,194 @@ public class TerminalSplitPane extends StackPane {
         });
     }
 
-    private void addSplitMenuItems(@NotNull ContextMenu menu, @NotNull JediTermFxWidget widget) {
-        focusedWidget = widget;
+    /**
+     * Sets a factory that provides extra menu items to add to the context menu.
+     * The factory receives the focused widget and returns a list of MenuItems.
+     * Called each time the context menu is opened, so items can reflect current state.
+     */
+    public void setExtraMenuItemsFactory(@Nullable Function<JediTermFxWidget, List<MenuItem>> factory) {
+        this.extraMenuItemsFactory = factory;
+    }
 
-        // Font size - same pattern as split items; widget methods no-op when not supported
-        MenuItem increaseFont = new MenuItem("Increase font size");
-        increaseFont.setOnAction(e -> widget.increaseFontSize(2));
-        MenuItem decreaseFont = new MenuItem("Decrease font size");
-        decreaseFont.setOnAction(e -> widget.decreaseFontSize(2));
-        MenuItem resetFont = new MenuItem("Reset font size");
-        resetFont.setOnAction(e -> widget.resetFontSize());
-        menu.getItems().add(new SeparatorMenuItem());
-        menu.getItems().addAll(increaseFont, decreaseFont, resetFont);
+    /**
+     * Sets up the context menu for a widget with split options.
+     * Creates a complete context menu that replaces the JediTermFX default,
+     * including Copy, Paste, Clear Buffer, Find, and an "Extras" submenu.
+     */
+    private void setupContextMenu(@NotNull JediTermFxWidget widget) {
+        // Get the canvas directly from TerminalPanel - this is where JediTermFX handles mouse events
+        var terminalPanel = widget.getTerminalPanel();
+        var canvas = terminalPanel.getCanvas();
+        
+        // Use event filter on MOUSE_PRESSED to close any existing context menu on any click
+        canvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
+            if (activeContextMenu != null && activeContextMenu.isShowing()) {
+                activeContextMenu.hide();
+                activeContextMenu = null;
+                if (event.getButton() != MouseButton.SECONDARY) {
+                    // For non-right-clicks, just close the menu and let the event pass through
+                    return;
+                }
+            }
+        });
+        
+        // Use event filter on MOUSE_CLICKED with SECONDARY button (right-click)
+        // This intercepts the event BEFORE JediTermFX's handler processes it
+        canvas.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED, event -> {
+            if (event.getButton() == MouseButton.SECONDARY) {
+                focusedWidget = widget;
+                
+                // Create and show our complete context menu
+                ContextMenu menu = createFullContextMenu(widget);
+                activeContextMenu = menu;
+                
+                // Auto-clear reference when menu hides
+                menu.setOnHidden(e -> {
+                    if (activeContextMenu == menu) {
+                        activeContextMenu = null;
+                    }
+                });
+                
+                menu.show(canvas, event.getScreenX(), event.getScreenY());
+                
+                // Consume the event to prevent JediTermFX from showing its own menu
+                event.consume();
+            }
+        });
+    }
+    
+    /**
+     * Creates a full context menu with standard terminal actions plus Extras submenu.
+     */
+    private @NotNull ContextMenu createFullContextMenu(@NotNull JediTermFxWidget widget) {
+        ContextMenu menu = new ContextMenu();
+        var terminalPanel = widget.getTerminalPanel();
+        
+        // Copy
+        MenuItem copy = new MenuItem("Copy");
+        copy.setOnAction(e -> invokeTerminalPanelMethod(terminalPanel, "handleCopy", null));
+        
+        // Paste
+        MenuItem paste = new MenuItem("Paste");
+        paste.setOnAction(e -> invokeTerminalPanelMethod(terminalPanel, "pasteFromClipboard", false));
+        
+        // Clear Buffer
+        MenuItem clearBuffer = new MenuItem("Clear Buffer");
+        clearBuffer.setOnAction(e -> invokeTerminalPanelMethod(terminalPanel, "clearBuffer", null));
+        
+        // Find
+        MenuItem find = new MenuItem("Find");
+        find.setOnAction(e -> invokeWidgetMethod(widget, "showFindComponent"));
+        
+        menu.getItems().addAll(copy, paste, clearBuffer, find);
+        
+        // Add extra menu items from factory (e.g. timestamp toggle)
+        if (extraMenuItemsFactory != null) {
+            List<MenuItem> extraItems = extraMenuItemsFactory.apply(widget);
+            if (extraItems != null && !extraItems.isEmpty()) {
+                menu.getItems().add(new SeparatorMenuItem());
+                menu.getItems().addAll(extraItems);
+            }
+        }
+        
+        // Separator before Extras
         menu.getItems().add(new SeparatorMenuItem());
         
-        // Broadcast mode toggle
-        CheckMenuItem broadcastToggle = new CheckMenuItem("Broadcast mode (type in all terminals)");
-        broadcastToggle.setSelected(broadcastMode);
-        broadcastToggle.setOnAction(e -> {
-            setBroadcastMode(broadcastToggle.isSelected());
-        });
-        // Only enable when there are multiple terminals
-        broadcastToggle.setDisable(rootCell.countWidgets() <= 1);
-        menu.getItems().add(broadcastToggle);
-        menu.getItems().add(new SeparatorMenuItem());
-
-        MenuItem splitRightSame = new MenuItem("Split right (same server)");
+        // Extras submenu
+        Menu extrasMenu = createExtrasSubmenu(widget);
+        menu.getItems().add(extrasMenu);
+        
+        return menu;
+    }
+    
+    /**
+     * Creates the "Extras" submenu with split and font options.
+     */
+    private @NotNull Menu createExtrasSubmenu(@NotNull JediTermFxWidget widget) {
+        Menu extrasMenu = new Menu("Extras");
+        
+        // Font size submenu
+        Menu fontMenu = new Menu("Font Size");
+        MenuItem increaseFont = new MenuItem("Increase");
+        increaseFont.setOnAction(e -> invokeWidgetFontMethod(widget, "increaseFontSize", 2));
+        MenuItem decreaseFont = new MenuItem("Decrease");
+        decreaseFont.setOnAction(e -> invokeWidgetFontMethod(widget, "decreaseFontSize", 2));
+        MenuItem resetFont = new MenuItem("Reset");
+        resetFont.setOnAction(e -> invokeWidgetFontMethod(widget, "resetFontSize", null));
+        fontMenu.getItems().addAll(increaseFont, decreaseFont, resetFont);
+        
+        // Split submenu
+        Menu splitMenu = new Menu("Split Terminal");
+        MenuItem splitRightSame = new MenuItem("Split Right (same server)");
         splitRightSame.setOnAction(e -> split(SplitRequest.SplitMode.SAME_SERVER_NEW_SHELL, Orientation.HORIZONTAL));
-
-        MenuItem splitRightNew = new MenuItem("Split right (new connection)");
+        MenuItem splitRightNew = new MenuItem("Split Right (new connection)");
         splitRightNew.setOnAction(e -> split(SplitRequest.SplitMode.NEW_CONNECTION, Orientation.HORIZONTAL));
-
-        MenuItem splitDownSame = new MenuItem("Split down (same server)");
+        MenuItem splitDownSame = new MenuItem("Split Down (same server)");
         splitDownSame.setOnAction(e -> split(SplitRequest.SplitMode.SAME_SERVER_NEW_SHELL, Orientation.VERTICAL));
-
-        MenuItem splitDownNew = new MenuItem("Split down (new connection)");
+        MenuItem splitDownNew = new MenuItem("Split Down (new connection)");
         splitDownNew.setOnAction(e -> split(SplitRequest.SplitMode.NEW_CONNECTION, Orientation.VERTICAL));
-
-        MenuItem closeSplit = new MenuItem("Close split");
+        MenuItem closeSplit = new MenuItem("Close Split");
         closeSplit.setOnAction(e -> closeSplit(widget));
         closeSplit.setDisable(rootCell.countWidgets() <= 1);
-
-        menu.getItems().addAll(
-                splitRightSame, splitRightNew,
-                new SeparatorMenuItem(),
-                splitDownSame, splitDownNew,
-                new SeparatorMenuItem(),
-                closeSplit
-        );
+        splitMenu.getItems().addAll(splitRightSame, splitRightNew, new SeparatorMenuItem(),
+                                    splitDownSame, splitDownNew, new SeparatorMenuItem(), closeSplit);
+        
+        // Broadcast mode
+        CheckMenuItem broadcastToggle = new CheckMenuItem("Broadcast Mode");
+        broadcastToggle.setSelected(broadcastMode);
+        broadcastToggle.setOnAction(e -> setBroadcastMode(broadcastToggle.isSelected()));
+        broadcastToggle.setDisable(rootCell.countWidgets() <= 1);
+        
+        // Add all to Extras menu
+        extrasMenu.getItems().addAll(fontMenu, splitMenu, new SeparatorMenuItem(), broadcastToggle);
+        
+        return extrasMenu;
+    }
+    
+    /**
+     * Invokes a method on the TerminalPanel via reflection.
+     */
+    private void invokeTerminalPanelMethod(@NotNull Object terminalPanel, @NotNull String methodName, @Nullable Object arg) {
+        try {
+            if (arg == null) {
+                // Try no-arg method first
+                try {
+                    var method = terminalPanel.getClass().getDeclaredMethod(methodName);
+                    method.setAccessible(true);
+                    method.invoke(terminalPanel);
+                    return;
+                } catch (NoSuchMethodException ignored) {}
+                
+                // Try KeyEvent arg (for handleCopy)
+                try {
+                    var method = terminalPanel.getClass().getDeclaredMethod(methodName, KeyEvent.class);
+                    method.setAccessible(true);
+                    method.invoke(terminalPanel, (KeyEvent) null);
+                    return;
+                } catch (NoSuchMethodException ignored) {}
+            } else if (arg instanceof Boolean) {
+                var method = terminalPanel.getClass().getDeclaredMethod(methodName, boolean.class);
+                method.setAccessible(true);
+                method.invoke(terminalPanel, arg);
+                return;
+            }
+            logger.warn("Could not find method {} on TerminalPanel", methodName);
+        } catch (Exception e) {
+            logger.warn("Failed to invoke {} on TerminalPanel: {}", methodName, e.getMessage());
+        }
+    }
+    
+    /**
+     * Invokes a no-arg method on the JediTermFxWidget via reflection.
+     */
+    private void invokeWidgetMethod(@NotNull JediTermFxWidget widget, @NotNull String methodName) {
+        try {
+            var method = widget.getClass().getDeclaredMethod(methodName);
+            method.setAccessible(true);
+            method.invoke(widget);
+        } catch (Exception e) {
+            logger.warn("Failed to invoke {} on JediTermFxWidget: {}", methodName, e.getMessage());
+        }
     }
 
     /**
@@ -294,10 +466,10 @@ public class TerminalSplitPane extends StackPane {
         SplitRequest request = new SplitRequest(mode, widget);
         JediTermFxWidget newWidget = createWidget(request);
         if (newWidget.getTtyConnector() == null) {
-            newWidget.close();
             return;
         }
         setupWidget(newWidget);
+        applyLeftPanel(newWidget);
 
         SplitCell newCell = new SplitCell(newWidget);
         SplitCell replacement = rootCell.replaceWidget(widget, newCell, orientation);
@@ -327,110 +499,6 @@ public class TerminalSplitPane extends StackPane {
             focusedWidget = rootCell != null ? findFirstWidget(rootCell) : null;
             refreshDragAndDrop();
         }
-    }
-
-    /**
-     * Moves a split terminal to a new position relative to another (e.g. above, below, left, right).
-     * Does nothing if there is only one widget or if source equals target.
-     */
-    public void moveWidget(@NotNull JediTermFxWidget source, @NotNull JediTermFxWidget target,
-                           @NotNull Placement placement) {
-        if (rootCell == null || getWidgetCount() <= 1 || source == target) {
-            return;
-        }
-        ExtractResult er = rootCell.extractWidget(source);
-        if (er == null || er.replacement == null) {
-            return;
-        }
-        Orientation orientation;
-        boolean newCellFirst;
-        switch (placement) {
-            case ABOVE:   orientation = Orientation.VERTICAL;   newCellFirst = true;  break;
-            case BELOW:   orientation = Orientation.VERTICAL;   newCellFirst = false; break;
-            case LEFT_OF: orientation = Orientation.HORIZONTAL; newCellFirst = true;  break;
-            case RIGHT_OF: orientation = Orientation.HORIZONTAL; newCellFirst = false; break;
-            default: return;
-        }
-        SplitCell newRoot = er.replacement.replaceWidget(target, er.extracted, orientation, newCellFirst);
-        if (newRoot == null) {
-            return;
-        }
-        getChildren().clear();
-        rootCell = newRoot;
-        getChildren().add(rootCell.getNode());
-        VBox.setVgrow(rootCell.getNode(), Priority.ALWAYS);
-        refreshDragAndDrop();
-    }
-
-    /** Walks all leaf cells (widget wrappers) in the tree. */
-    private void forEachLeafCell(@Nullable SplitCell cell, @NotNull java.util.function.Consumer<SplitCell> action) {
-        if (cell == null) return;
-        if (cell.widget != null) {
-            action.accept(cell);
-            return;
-        }
-        forEachLeafCell(cell.leftCell, action);
-        forEachLeafCell(cell.rightCell, action);
-    }
-
-    /** (Re-)attaches drag source and drop target handlers to all terminal wrappers. */
-    private void refreshDragAndDrop() {
-        forEachLeafCell(rootCell, this::attachDragAndDropToCell);
-    }
-
-    private @Nullable JediTermFxWidget findWidgetByIdentity(@NotNull String idString) {
-        int id;
-        try {
-            id = Integer.parseInt(idString);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-        for (JediTermFxWidget w : getAllWidgets()) {
-            if (System.identityHashCode(w) == id) return w;
-        }
-        return null;
-    }
-
-    private void attachDragAndDropToCell(@NotNull SplitCell cell) {
-        Region node = cell.getNode();
-        JediTermFxWidget widget = cell.widget;
-        if (widget == null) return;
-
-        node.setOnDragDetected(event -> {
-            if (getWidgetCount() <= 1) return;
-            Dragboard db = node.startDragAndDrop(TransferMode.MOVE);
-            db.setContent(Map.of(DRAG_TERMINAL_FORMAT, String.valueOf(System.identityHashCode(widget))));
-            event.consume();
-        });
-
-        node.setOnDragEntered(event -> {
-            if (!event.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) return;
-            String sourceId = (String) event.getDragboard().getContent(DRAG_TERMINAL_FORMAT);
-            if (sourceId.equals(String.valueOf(System.identityHashCode(widget)))) return;
-            JediTermFxWidget source = findWidgetByIdentity(sourceId);
-            if (source == null) return;
-            DropZoneOverlay.show(node, widget, sourceId, this);
-            event.consume();
-        });
-
-        node.setOnDragExited(event -> {
-            DropZoneOverlay.hide(node);
-            event.consume();
-        });
-
-        node.setOnDragOver(event -> {
-            if (event.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) {
-                event.acceptTransferModes(TransferMode.MOVE);
-                DropZoneOverlay.updatePlacement(node, event.getX(), event.getY());
-            }
-            event.consume();
-        });
-
-        node.setOnDragDropped(event -> {
-            boolean done = DropZoneOverlay.tryDrop(node, this);
-            event.setDropCompleted(done);
-            event.consume();
-        });
     }
 
     /**
@@ -489,19 +557,163 @@ public class TerminalSplitPane extends StackPane {
     }
 
     /**
+     * Moves a split terminal to a new position relative to another (e.g. above, below, left, right).
+     */
+    public void moveWidget(@NotNull JediTermFxWidget source, @NotNull JediTermFxWidget target,
+                           @NotNull Placement placement) {
+        if (rootCell == null || getWidgetCount() <= 1 || source == target) {
+            return;
+        }
+        ExtractResult er = rootCell.extractWidget(source);
+        if (er == null || er.replacement == null) {
+            return;
+        }
+        Orientation orientation;
+        boolean newCellFirst;
+        switch (placement) {
+            case ABOVE:   orientation = Orientation.VERTICAL;   newCellFirst = true;  break;
+            case BELOW:   orientation = Orientation.VERTICAL;   newCellFirst = false; break;
+            case LEFT_OF: orientation = Orientation.HORIZONTAL; newCellFirst = true;  break;
+            case RIGHT_OF: orientation = Orientation.HORIZONTAL; newCellFirst = false; break;
+            default: return;
+        }
+        SplitCell newRoot = er.replacement.replaceWidget(target, er.extracted, orientation, newCellFirst);
+        if (newRoot == null) {
+            return;
+        }
+        getChildren().clear();
+        rootCell = newRoot;
+        getChildren().add(rootCell.getNode());
+        VBox.setVgrow(rootCell.getNode(), Priority.ALWAYS);
+        refreshDragAndDrop();
+    }
+
+    private void forEachLeafCell(@Nullable SplitCell cell, @NotNull java.util.function.Consumer<SplitCell> action) {
+        if (cell == null) return;
+        if (cell.widget != null) {
+            action.accept(cell);
+            return;
+        }
+        forEachLeafCell(cell.leftCell, action);
+        forEachLeafCell(cell.rightCell, action);
+    }
+
+    private void refreshDragAndDrop() {
+        forEachLeafCell(rootCell, this::attachDragAndDropToCell);
+    }
+
+    private @Nullable JediTermFxWidget findWidgetByIdentity(@NotNull String idString) {
+        int id;
+        try {
+            id = Integer.parseInt(idString);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        for (JediTermFxWidget w : getAllWidgets()) {
+            if (System.identityHashCode(w) == id) return w;
+        }
+        return null;
+    }
+
+    private void attachDragAndDropToCell(@NotNull SplitCell cell) {
+        Region node = cell.getNode();
+        JediTermFxWidget widget = cell.widget;
+        if (widget == null) return;
+
+        node.setOnDragDetected(event -> {
+            if (getWidgetCount() <= 1) return;
+            if (event.isConsumed()) return;
+            if (!(event.isShiftDown() && event.isAltDown())) return;
+            // Use ANY so platform modifier overrides (e.g. Option->COPY on macOS) don't block drop.
+            Dragboard db = node.startDragAndDrop(TransferMode.ANY);
+            db.setContent(Map.of(DRAG_TERMINAL_FORMAT, String.valueOf(System.identityHashCode(widget))));
+            event.consume();
+        });
+
+        node.addEventFilter(DragEvent.DRAG_ENTERED, event -> {
+            if (!event.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) return;
+            String sourceId = (String) event.getDragboard().getContent(DRAG_TERMINAL_FORMAT);
+            if (sourceId.equals(String.valueOf(System.identityHashCode(widget)))) return;
+            JediTermFxWidget source = findWidgetByIdentity(sourceId);
+            if (source == null) return;
+            DropZoneOverlay.show(node, widget, sourceId, this);
+            event.consume();
+        });
+
+        node.addEventFilter(DragEvent.DRAG_EXITED, event -> {
+            DropZoneOverlay.hide(node);
+            event.consume();
+        });
+
+        node.addEventFilter(DragEvent.DRAG_OVER, event -> {
+            if (event.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) {
+                event.acceptTransferModes(TransferMode.ANY);
+                DropZoneOverlay.updatePlacement(node, event.getX(), event.getY());
+            }
+            event.consume();
+        });
+
+        node.addEventFilter(DragEvent.DRAG_DROPPED, event -> {
+            boolean done = DropZoneOverlay.tryDrop(node, this);
+            event.setDropCompleted(done);
+            event.consume();
+        });
+    }
+
+    /**
+     * Applies the left panel factory for a widget, storing the result
+     * in widgetLeftPanels so SplitCell can include it in the layout.
+     * Called after widgetConfigurator but before SplitCell construction.
+     */
+    private void applyLeftPanel(@NotNull JediTermFxWidget widget) {
+        if (leftPanelFactory != null) {
+            Region leftPanel = leftPanelFactory.apply(widget);
+            if (leftPanel != null) {
+                widgetLeftPanels.put(widget, leftPanel);
+            }
+        }
+    }
+
+    /**
+     * Registers a left-side panel (e.g. timestamp gutter) for a widget.
+     * For dynamically adding panels after the widget is already created.
+     */
+    public void setWidgetLeftPanel(@NotNull JediTermFxWidget widget, @NotNull Region panel) {
+        widgetLeftPanels.put(widget, panel);
+    }
+
+    /**
+     * Removes the left-side panel reference for a widget.
+     */
+    public void removeWidgetLeftPanel(@NotNull JediTermFxWidget widget) {
+        widgetLeftPanels.remove(widget);
+    }
+
+    /**
      * Closes all terminal sessions in this split pane.
      */
     public void closeAll() {
-        if (rootCell == null) return;
         rootCell.closeAll();
     }
 
     /**
-     * Releases resources (e.g. broadcast executor). Call when this pane is no longer used
-     * so the executor can be shut down and the pane can be GC'd.
+     * Invokes optional font size methods on JediTermFxWidget via reflection.
+     * This keeps compatibility with upstream JediTermFX builds where these methods do not exist.
      */
-    public void dispose() {
-        broadcastExecutor.shutdown();
+    private void invokeWidgetFontMethod(@NotNull JediTermFxWidget widget, @NotNull String methodName, @Nullable Integer delta) {
+        try {
+            if (delta == null) {
+                var method = widget.getClass().getMethod(methodName);
+                method.invoke(widget);
+            } else {
+                var method = widget.getClass().getMethod(methodName, int.class);
+                method.invoke(widget, delta);
+            }
+        } catch (NoSuchMethodException e) {
+            logger.debug("Widget method {} not available (upstream JediTermFX)", methodName);
+        } catch (Exception e) {
+            logger.debug("Failed to invoke widget method {}: {}", methodName, e.getMessage());
+        }
     }
 
     /**
@@ -519,7 +731,21 @@ public class TerminalSplitPane extends StackPane {
             this.splitPane = null;
             this.leftCell = null;
             this.rightCell = null;
-            StackPane wrapper = new StackPane(widget.getPane());
+
+            // Check if a left-side panel (e.g. timestamp gutter) is registered for this widget
+            Region leftPanel = widgetLeftPanels.get(widget);
+            Region wrapperContent;
+            if (leftPanel != null) {
+                HBox hbox = new HBox(leftPanel, widget.getPane());
+                HBox.setHgrow(widget.getPane(), Priority.ALWAYS);
+                hbox.setMinSize(0, 0);
+                hbox.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+                wrapperContent = hbox;
+            } else {
+                wrapperContent = widget.getPane();
+            }
+
+            StackPane wrapper = new StackPane(wrapperContent);
             wrapper.setMinSize(0, 0);
             wrapper.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
             VBox.setVgrow(wrapper, Priority.ALWAYS);
@@ -562,7 +788,6 @@ public class TerminalSplitPane extends StackPane {
             return replaceWidget(target, newCell, orientation, false);
         }
 
-        /** Replaces target with a split (target + newCell). If newCellFirst, order is (newCell, target). */
         @Nullable
         SplitCell replaceWidget(@NotNull JediTermFxWidget target, @NotNull SplitCell newCell,
                                @NotNull Orientation orientation, boolean newCellFirst) {
@@ -584,7 +809,6 @@ public class TerminalSplitPane extends StackPane {
             return null;
         }
 
-        /** Extracts the cell containing target from the tree without closing it. Returns null if not found. */
         @Nullable
         ExtractResult extractWidget(@NotNull JediTermFxWidget target) {
             if (widget == target) {
@@ -668,10 +892,6 @@ public class TerminalSplitPane extends StackPane {
         return null;
     }
 
-    /**
-     * Overlay shown over a terminal wrapper during drag, with four drop zones (above, below, left, right).
-     * Stored in the wrapper's properties under this key.
-     */
     private static final String DROP_ZONE_OVERLAY_KEY = "jeditermfx.dropZoneOverlay";
 
     private static final class DropZoneOverlay {
@@ -760,7 +980,7 @@ public class TerminalSplitPane extends StackPane {
             if (wrapper instanceof StackPane) {
                 overlay.pane.setOnDragOver(e -> {
                     if (e.getDragboard().hasContent(DRAG_TERMINAL_FORMAT)) {
-                        e.acceptTransferModes(TransferMode.MOVE);
+                        e.acceptTransferModes(TransferMode.ANY);
                         updatePlacement(wrapper, e.getX(), e.getY());
                     }
                     e.consume();
