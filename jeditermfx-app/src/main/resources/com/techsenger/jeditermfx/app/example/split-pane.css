@@ -1,0 +1,11 @@
+/* Make SplitPane divider thicker for easier dragging */
+.split-pane > .split-pane-divider {
+    -fx-padding: 0 4 0 4;
+    -fx-background-color: derive(-fx-base, -10%);
+}
+.split-pane:horizontal > .split-pane-divider {
+    -fx-cursor: col-resize;
+}
+.split-pane:vertical > .split-pane-divider {
+    -fx-cursor: row-resize;
+}

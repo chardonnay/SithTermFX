@@ -92,7 +92,12 @@ public enum TerminalMode {
 
     KeyboardAction,
 
-    InsertMode,
+    InsertMode {
+        @Override
+        public void setEnabled(Terminal terminal, boolean enabled) {
+            // IRM (Insert Mode): not implemented; accept and ignore to avoid warnings.
+        }
+    },
 
     SendReceive,
 

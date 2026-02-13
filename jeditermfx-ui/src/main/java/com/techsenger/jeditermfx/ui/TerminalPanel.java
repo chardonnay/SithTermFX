@@ -1925,7 +1925,9 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
                     scrollDown();
                     return true;
                 })));
-        if (mySettingsProvider instanceof MutableFontSizeProvider) {
+        // Only add font size actions here when no context menu extender is set; otherwise
+        // TerminalSplitPane.addSplitMenuItems() already adds them and we would get duplicates.
+        if (mySettingsProvider instanceof MutableFontSizeProvider && myContextMenuExtender == null) {
             MutableFontSizeProvider fontProvider = (MutableFontSizeProvider) mySettingsProvider;
             actions.add(new TerminalAction(new TerminalActionPresentation("Increase font size", Collections.emptyList()), input -> {
                 fontProvider.increaseFontSize(2);

@@ -1,1 +1,5 @@
 target/
+
+# Classpath files with user-specific absolute paths (use mvn dependency:build-classpath or IDE)
+cp.txt
+**/cp.txt

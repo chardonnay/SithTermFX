@@ -483,6 +483,12 @@ public class JediEmulator extends DataStreamIteratingEmulator {
                     //Set Top and Bottom Margins
                     return setScrollingRegion(args); //DECSTBM
                 }
+            case 's':
+                // CSI ? Ps s: save private mode (e.g. xterm DECSCUSR-style save); accept as no-op.
+                if (args.startsWithQuestionMark()) {
+                    return true;
+                }
+                return false;
             case 't':
                 return windowManipulation(args);
             default:

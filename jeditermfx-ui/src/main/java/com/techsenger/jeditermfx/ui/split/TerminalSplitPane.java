@@ -24,6 +24,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -35,6 +37,10 @@ public class TerminalSplitPane extends StackPane {
 
     private static final Logger logger = LoggerFactory.getLogger(TerminalSplitPane.class);
 
+    /** Control sequences used in KEY_PRESSED; skip these in KEY_TYPED to avoid duplicate broadcast. */
+    private static final String BACK_SPACE_CONTROL_SEQUENCE = "\u007F";
+    private static final String DELETE_CONTROL_SEQUENCE = "\u001B[3~";
+
     private final SettingsProvider settingsProvider;
     private final SplitConnectorFactory connectorFactory;
     private final Consumer<JediTermFxWidget> widgetConfigurator;
@@ -42,6 +48,13 @@ public class TerminalSplitPane extends StackPane {
     private SplitCell rootCell;
     private JediTermFxWidget focusedWidget;
     private boolean broadcastMode = false;
+
+    /** Executor for broadcasting key input to other connectors off the JavaFX thread. */
+    private final ExecutorService broadcastExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "TerminalSplitPane-broadcast");
+        t.setDaemon(true);
+        return t;
+    });
 
     public TerminalSplitPane(@NotNull SettingsProvider settingsProvider,
                              @NotNull SplitConnectorFactory connectorFactory) {
@@ -61,20 +74,24 @@ public class TerminalSplitPane extends StackPane {
     
     /**
      * Broadcasts input to all OTHER widgets (not the source widget).
+     * Writes are offloaded to a background executor to avoid blocking the JavaFX thread.
      */
     private void broadcastToOthers(@NotNull JediTermFxWidget sourceWidget, @NotNull String data) {
         if (!broadcastMode) return;
-        
+
         List<JediTermFxWidget> allWidgets = getAllWidgets();
         for (JediTermFxWidget widget : allWidgets) {
             if (widget != sourceWidget) {
                 TtyConnector connector = widget.getTtyConnector();
                 if (connector != null && connector.isConnected()) {
-                    try {
-                        connector.write(data);
-                    } catch (IOException e) {
-                        logger.debug("Failed to broadcast to widget: {}", e.getMessage());
-                    }
+                    final TtyConnector c = connector;
+                    broadcastExecutor.submit(() -> {
+                        try {
+                            c.write(data);
+                        } catch (IOException e) {
+                            logger.debug("Failed to broadcast to widget: {}", e.getMessage());
+                        }
+                    });
                 }
             }
         }
@@ -83,7 +100,7 @@ public class TerminalSplitPane extends StackPane {
     private @Nullable String getControlSequence(KeyEvent event) {
         switch (event.getCode()) {
             case ENTER: return "\r";
-            case BACK_SPACE: return "\u007F";
+            case BACK_SPACE: return BACK_SPACE_CONTROL_SEQUENCE;
             case TAB: return "\t";
             case ESCAPE: return "\u001B";
             case UP: return "\u001B[A";
@@ -95,7 +112,7 @@ public class TerminalSplitPane extends StackPane {
             case PAGE_UP: return "\u001B[5~";
             case PAGE_DOWN: return "\u001B[6~";
             case INSERT: return "\u001B[2~";
-            case DELETE: return "\u001B[3~";
+            case DELETE: return DELETE_CONTROL_SEQUENCE;
             case F1: return "\u001BOP";
             case F2: return "\u001BOQ";
             case F3: return "\u001BOR";
@@ -151,16 +168,14 @@ public class TerminalSplitPane extends StackPane {
         widgetPane.addEventFilter(KeyEvent.KEY_TYPED, event -> {
             if (!broadcastMode) return;
             String character = event.getCharacter();
-            if (character != null && !character.isEmpty()) {
-                char c = character.charAt(0);
-                // Only skip specific control characters that are handled in KEY_PRESSED:
-                // \r (13) = ENTER, \t (9) = TAB, \u001B (27) = ESC, \u007F (127) = DEL
-                // All other control characters (like Ctrl+L = \u000C) should pass through
-                if (c == '\r' || c == '\t' || c == '\u001B' || c == '\u007F') {
-                    return;
-                }
-                broadcastToOthers(widget, character);
+            if (character == null || character.isEmpty()) return;
+            // Skip single-char control sequences that KEY_PRESSED also sends (getControlSequence), to avoid duplicate broadcast.
+            // getCharacter() yields only single characters; DELETE uses multi-char "\u001B[3~" so it is not seen here.
+            if (character.equals(BACK_SPACE_CONTROL_SEQUENCE) || character.equals("\r")
+                    || character.equals("\t") || character.equals("\u001B")) {
+                return;
             }
+            broadcastToOthers(widget, character);
         });
         
         widgetPane.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
@@ -253,6 +268,7 @@ public class TerminalSplitPane extends StackPane {
         SplitRequest request = new SplitRequest(mode, widget);
         JediTermFxWidget newWidget = createWidget(request);
         if (newWidget.getTtyConnector() == null) {
+            newWidget.close();
             return;
         }
         setupWidget(newWidget);
@@ -347,7 +363,16 @@ public class TerminalSplitPane extends StackPane {
      * Closes all terminal sessions in this split pane.
      */
     public void closeAll() {
+        if (rootCell == null) return;
         rootCell.closeAll();
+    }
+
+    /**
+     * Releases resources (e.g. broadcast executor). Call when this pane is no longer used
+     * so the executor can be shut down and the pane can be GC'd.
+     */
+    public void dispose() {
+        broadcastExecutor.shutdown();
     }
 
     /**

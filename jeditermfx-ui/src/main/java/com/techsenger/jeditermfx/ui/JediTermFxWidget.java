@@ -79,6 +79,9 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
 
     private TerminalActionProvider myNextActionProvider;
 
+    /** Captured listener for font size changes; unregistered in close() to avoid leaking this widget. */
+    private Runnable fontSizeListener;
+
     private final StackPane myInnerPanel;
 
     private final TextProcessing myTextProcessing;
@@ -131,7 +134,8 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
             }
         });
         if (mySettingsProvider instanceof MutableFontSizeProvider) {
-            ((MutableFontSizeProvider) mySettingsProvider).addFontSizeListener(() -> myTerminalPanel.requestFontResize());
+            fontSizeListener = () -> myTerminalPanel.requestFontResize();
+            ((MutableFontSizeProvider) mySettingsProvider).addFontSizeListener(fontSizeListener);
         }
         myTerminalPanel.init();
     }
@@ -308,6 +312,10 @@ public class JediTermFxWidget implements TerminalSession, TerminalWidget, Termin
 
     @Override
     public void close() {
+        if (fontSizeListener != null && mySettingsProvider instanceof MutableFontSizeProvider) {
+            ((MutableFontSizeProvider) mySettingsProvider).removeFontSizeListener(fontSizeListener);
+            fontSizeListener = null;
+        }
         stopRunningSession();
         if (myTerminalStarter != null) {
             myTerminalStarter.close();
