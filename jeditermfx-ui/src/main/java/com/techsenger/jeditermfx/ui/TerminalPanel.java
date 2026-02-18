@@ -331,6 +331,9 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         this.canvas.setFocusTraversable(true);
         this.canvas.setCache(true);
         this.scrollBar.setOrientation(Orientation.VERTICAL);
+        this.scrollBar.setMinWidth(14);
+        this.scrollBar.setPrefWidth(14);
+        this.scrollBar.getStyleClass().add("terminal-scroll-bar");
         if (mySettingsProvider.useAntialiasing()) {
             //Important! FontSmoothingType.LCD is very slow
             graphicsContext.setFontSmoothingType(FontSmoothingType.GRAY);

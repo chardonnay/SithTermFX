@@ -1,4 +1,23 @@
-
-.scroll-bar.no-thumb > .thumb {
+/* Terminal scrollbar: always visible track for vertical history scrolling */
+.scroll-bar.terminal-scroll-bar {
+    -fx-background-color: transparent;
+}
+.scroll-bar.terminal-scroll-bar .track {
+    -fx-background-color: derive(-fx-control-inner-background, -5%);
+    -fx-background-radius: 0.25em;
+}
+.scroll-bar.terminal-scroll-bar .thumb {
+    -fx-background-color: derive(-fx-control-inner-background, -25%);
+    -fx-background-radius: 0.25em;
+}
+.scroll-bar.terminal-scroll-bar .thumb:hover {
+    -fx-background-color: derive(-fx-control-inner-background, -35%);
+}
+.scroll-bar.terminal-scroll-bar.increment-button,
+.scroll-bar.terminal-scroll-bar.decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0.25em;
+}
+.scroll-bar.terminal-scroll-bar.no-thumb > .thumb {
     -fx-opacity: 0;
 }
