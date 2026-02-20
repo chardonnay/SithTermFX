@@ -1145,6 +1145,29 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         return (int) Math.round(myCharSize.getHeight() * myTermSize.getRows());
     }
 
+    /**
+     * Returns the current scroll origin in terminal row coordinates.
+     * Range is typically [-historyLinesCount, 0].
+     */
+    public int getScrollOrigin() {
+        return swingClientScrollOrigin;
+    }
+
+    /**
+     * Returns the rendered height of a single terminal cell in pixels.
+     */
+    public double getCellHeightPixels() {
+        return myCharSize.getHeight();
+    }
+
+    /**
+     * Returns the text baseline offset within a row in pixels.
+     * Baseline Y for row r is: r * cellHeight + baselineOffset.
+     */
+    public double getCellBaselineOffsetPixels() {
+        return myCharSize.getHeight() - mySpaceBetweenLines / 2.0 - myDescent;
+    }
+
     private int getColumnCount() {
         return myTermSize.getColumns();
     }
