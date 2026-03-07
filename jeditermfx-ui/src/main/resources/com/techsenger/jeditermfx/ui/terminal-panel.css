@@ -3,15 +3,19 @@
     -fx-background-color: transparent;
 }
 .scroll-bar.terminal-scroll-bar .track {
-    -fx-background-color: derive(-fx-control-inner-background, -5%);
-    -fx-background-radius: 0.25em;
+    -fx-background-color: #404040;
+    -fx-background-radius: 0.35em;
 }
 .scroll-bar.terminal-scroll-bar .thumb {
-    -fx-background-color: derive(-fx-control-inner-background, -25%);
-    -fx-background-radius: 0.25em;
+    -fx-background-color: #888888;
+    -fx-background-radius: 0.35em;
+    -fx-min-height: 32px;
 }
 .scroll-bar.terminal-scroll-bar .thumb:hover {
-    -fx-background-color: derive(-fx-control-inner-background, -35%);
+    -fx-background-color: #a0a0a0;
+}
+.scroll-bar.terminal-scroll-bar .thumb:pressed {
+    -fx-background-color: #707070;
 }
 .scroll-bar.terminal-scroll-bar.increment-button,
 .scroll-bar.terminal-scroll-bar.decrement-button {
