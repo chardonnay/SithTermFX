@@ -28,6 +28,17 @@
         <url>https://github.com/chardonnay/SithTermFX/issues</url>
     </issueManagement>
 
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <url>https://maven.pkg.github.com/chardonnay/SithTermFX</url>
+        </repository>
+        <snapshotRepository>
+            <id>github</id>
+            <url>https://maven.pkg.github.com/chardonnay/SithTermFX</url>
+        </snapshotRepository>
+    </distributionManagement>
+
     <developers>
         <developer>
             <id>danielmengel</id>
