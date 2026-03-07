@@ -1,35 +1,34 @@
-# SithTermFX Integration Guide
+= SithTermFX Integration Guide
+:toc: macro
+:toc-title: Table of Contents
+:toclevels: 3
+:icons: font
+:imagesdir: images
+:source-highlighter: rouge
 
 This guide shows how to embed SithTermFX into your own JavaFX application.
 Each section builds on the previous one, from a minimal "Hello Terminal" to
 production-grade integration with split screens, theming, and SSH connectivity.
 
-All examples reference the public API documented in
-[`docs/public-api.md`](public-api.md). A working reference implementation can
-be found in the [korTTY](https://github.com/chardonnay/korTTY) SSH client.
+All examples reference the public API documented in link:public-api.adoc[public-api.adoc].
+A working reference implementation can be found in the https://github.com/chardonnay/korTTY[korTTY] SSH client.
 
----
+toc::[]
 
-## Table of Contents
+== Architecture Overview
 
-1. [Dependencies](#dependencies)
-2. [Quick Start — Minimal Terminal](#quick-start)
-3. [Connecting a Real Shell (PTY)](#real-shell)
-4. [Custom TtyConnector (SSH Example)](#custom-connector)
-5. [Theming and Colors](#theming)
-6. [Dynamic Font Size](#dynamic-font-size)
-7. [Split Terminal](#split-terminal)
-8. [Hyperlinks](#hyperlinks)
-9. [Terminal Lifecycle](#lifecycle)
-10. [Advanced Integration Patterns](#advanced)
+The following diagram shows the high-level architecture and how the main components interact:
 
----
+image::architecture-overview.png[Architecture Overview,800]
 
-## 1. Dependencies <a name="dependencies"></a>
+'''
 
-### Maven
+== 1. Dependencies
 
-```xml
+=== Maven
+
+[source,xml]
+----
 <dependency>
     <groupId>com.sithtermfx</groupId>
     <artifactId>sithtermfx-core</artifactId>
@@ -40,47 +39,51 @@ be found in the [korTTY](https://github.com/chardonnay/korTTY) SSH client.
     <artifactId>sithtermfx-ui</artifactId>
     <version>${sithtermfx.version}</version>
 </dependency>
-```
+----
 
-### Gradle (Kotlin DSL)
+=== Gradle (Kotlin DSL)
 
-```kotlin
+[source,kotlin]
+----
 implementation("com.sithtermfx:sithtermfx-core:${sithtermfxVersion}")
 implementation("com.sithtermfx:sithtermfx-ui:${sithtermfxVersion}")
-```
+----
 
-### JPMS (module-info.java)
+=== JPMS (module-info.java)
 
 If your application uses the Java Module System, add:
 
-```java
+[source,java]
+----
 module my.app {
     requires com.sithtermfx.core;
     requires com.sithtermfx.ui;
     // ...
 }
-```
+----
 
-### Building from Source
+=== Building from Source
 
 Until the first Maven Central release, build from source:
 
-```bash
+[source,bash]
+----
 git clone https://github.com/chardonnay/SithTermFX.git
 cd SithTermFX
 mvn clean install
-```
+----
 
 The SNAPSHOTs are then available from `mavenLocal()`.
 
----
+'''
 
-## 2. Quick Start — Minimal Terminal <a name="quick-start"></a>
+== 2. Quick Start — Minimal Terminal
 
 The smallest possible SithTermFX integration: a terminal that displays
 colored text from an in-memory data source.
 
-```java
+[source,java]
+----
 package com.example;
 
 import com.sithtermfx.core.TtyConnector;
@@ -177,24 +180,25 @@ public class MinimalTerminalApp extends Application {
         launch(args);
     }
 }
-```
+----
 
-**Key points:**
-- `SithTermFxWidget` is the main entry point — it provides `getPane()` which
+*Key points:*
+
+* `SithTermFxWidget` is the main entry point — it provides `getPane()` which
   returns a JavaFX `Region` you embed in your scene graph.
-- `DefaultSettingsProvider` gives sensible defaults (Menlo/Consolas font,
-  14pt, light background).
-- Call `widget.start()` after `setTtyConnector()` to begin terminal emulation.
-- Always call `widget.close()` on shutdown.
+* `DefaultSettingsProvider` gives sensible defaults (Menlo/Consolas font, 14pt, light background).
+* Call `widget.start()` after `setTtyConnector()` to begin terminal emulation.
+* Always call `widget.close()` on shutdown.
 
----
+'''
 
-## 3. Connecting a Real Shell (PTY) <a name="real-shell"></a>
+== 3. Connecting a Real Shell (PTY)
 
-For a real interactive shell, use [Pty4J](https://github.com/JetBrains/pty4j)
+For a real interactive shell, use https://github.com/JetBrains/pty4j[Pty4J]
 to create a pseudo-terminal:
 
-```java
+[source,java]
+----
 import com.pty4j.PtyProcess;
 import com.pty4j.PtyProcessBuilder;
 import com.sithtermfx.core.ProcessTtyConnector;
@@ -222,11 +226,12 @@ private TtyConnector createLocalShell() {
         throw new IllegalStateException("Failed to start PTY", e);
     }
 }
-```
+----
 
 Then wire it up:
 
-```java
+[source,java]
+----
 SithTermFxWidget widget = new SithTermFxWidget(80, 24,
         new DefaultSettingsProvider());
 widget.setTtyConnector(createLocalShell());
@@ -238,18 +243,18 @@ widget.addListener(terminalWidget -> {
     widget.close();
     widget.getTtyConnector().close();
 });
-```
+----
 
----
+'''
 
-## 4. Custom TtyConnector (SSH Example) <a name="custom-connector"></a>
+== 4. Custom TtyConnector (SSH Example)
 
 For remote connections (SSH, Telnet, serial), implement the `TtyConnector`
 interface. Below is a simplified SSH connector based on the
-[korTTY](https://github.com/chardonnay/korTTY) implementation using
-Apache MINA SSHD:
+https://github.com/chardonnay/korTTY[korTTY] implementation using Apache MINA SSHD:
 
-```java
+[source,java]
+----
 import com.sithtermfx.core.TtyConnector;
 import com.sithtermfx.core.util.TermSize;
 import org.apache.sshd.client.channel.ChannelShell;
@@ -338,11 +343,12 @@ public class SshTtyConnector implements TtyConnector {
         try { session.close(); } catch (IOException ignored) { }
     }
 }
-```
+----
 
-**Usage:**
+*Usage:*
 
-```java
+[source,java]
+----
 ClientSession session = sshClient.connect("user", "host", 22)
         .verify().getSession();
 session.addPasswordIdentity("password");
@@ -354,18 +360,22 @@ SithTermFxWidget widget = new SithTermFxWidget(80, 24,
         new DefaultSettingsProvider());
 widget.setTtyConnector(connector);
 widget.start();
-```
+----
 
----
+'''
 
-## 5. Theming and Colors <a name="theming"></a>
+== 5. Theming and Colors
 
-### Dark Theme
+The following diagram shows the settings/theming hierarchy and the runtime color change flow:
 
-Override `getDefaultForeground()` and `getDefaultBackground()` in a custom
-settings provider:
+image::settings-theming.png[Settings and Theming,800]
 
-```java
+=== Dark Theme
+
+Override `getDefaultForeground()` and `getDefaultBackground()` in a custom settings provider:
+
+[source,java]
+----
 import com.sithtermfx.core.TerminalColor;
 import com.sithtermfx.ui.settings.DefaultSettingsProvider;
 
@@ -381,14 +391,14 @@ public class DarkThemeSettingsProvider extends DefaultSettingsProvider {
         return new TerminalColor(255, 255, 255);    // white
     }
 }
-```
+----
 
-### Changing Colors at Runtime
+=== Changing Colors at Runtime
 
-Access the terminal's `StyleState` to change foreground/background colors
-without reconnecting:
+Access the terminal's `StyleState` to change foreground/background colors without reconnecting:
 
-```java
+[source,java]
+----
 import com.sithtermfx.core.TerminalColor;
 import com.sithtermfx.core.TextStyle;
 import com.sithtermfx.core.model.SithTerminal;
@@ -407,27 +417,28 @@ public void applyColors(SithTermFxWidget widget,
         Platform.runLater(() -> widget.getTerminalPanel().repaint());
     }
 }
-```
+----
 
-### Cursor Shape
+=== Cursor Shape
 
 Set the cursor shape to `BLINK_BLOCK`, `STEADY_BLOCK`, `BLINK_UNDERLINE`,
 `STEADY_UNDERLINE`, `BLINK_VERTICAL_BAR`, or `STEADY_VERTICAL_BAR`:
 
-```java
+[source,java]
+----
 import com.sithtermfx.core.CursorShape;
 
 widget.getTerminalPanel().setCursorShape(CursorShape.STEADY_UNDERLINE);
-```
+----
 
----
+'''
 
-## 6. Dynamic Font Size <a name="dynamic-font-size"></a>
+== 6. Dynamic Font Size
 
-Use `DynamicFontSizeSettingsProvider` to enable runtime font resizing
-(Ctrl/Cmd + Plus/Minus/0):
+Use `DynamicFontSizeSettingsProvider` to enable runtime font resizing (Ctrl/Cmd + Plus/Minus/0):
 
-```java
+[source,java]
+----
 import com.sithtermfx.ui.settings.DynamicFontSizeSettingsProvider;
 
 // Start with 14pt font
@@ -437,11 +448,12 @@ DynamicFontSizeSettingsProvider settings =
 SithTermFxWidget widget = new SithTermFxWidget(80, 24, settings);
 widget.setTtyConnector(createLocalShell());
 widget.start();
-```
+----
 
-### Programmatic Font Control
+=== Programmatic Font Control
 
-```java
+[source,java]
+----
 // Zoom in by 2pt
 settings.increaseFontSize(2);
 
@@ -458,13 +470,14 @@ settings.setFontSize(18f);
 settings.addFontSizeListener(() -> {
     System.out.println("Font size: " + settings.getFontSize());
 });
-```
+----
 
-### Custom Font Size Range
+=== Custom Font Size Range
 
 Extend `DynamicFontSizeSettingsProvider` and override min/max:
 
-```java
+[source,java]
+----
 public class AppSettingsProvider extends DynamicFontSizeSettingsProvider {
 
     public AppSettingsProvider(float initialSize) {
@@ -482,19 +495,23 @@ public class AppSettingsProvider extends DynamicFontSizeSettingsProvider {
         return Font.font("JetBrains Mono", getTerminalFontSize());
     }
 }
-```
+----
 
----
+'''
 
-## 7. Split Terminal <a name="split-terminal"></a>
+== 7. Split Terminal
 
 `TerminalSplitPane` manages nested horizontal/vertical splits with
-independent sessions, context menus, broadcast mode, and drag-and-drop
-reordering.
+independent sessions, context menus, broadcast mode, and drag-and-drop reordering.
 
-### Basic Setup
+The following diagram illustrates the internal split-cell tree and the resulting visual layout:
 
-```java
+image::split-terminal-structure.png[Split Terminal Structure,800]
+
+=== Basic Setup
+
+[source,java]
+----
 import com.sithtermfx.ui.split.TerminalSplitPane;
 import com.sithtermfx.ui.split.SplitConnectorFactory;
 
@@ -520,11 +537,12 @@ splitPane.prefHeightProperty().bind(scene.heightProperty());
 stage.setScene(scene);
 stage.setOnCloseRequest(e -> splitPane.closeAll());
 stage.show();
-```
+----
 
-### Programmatic Split Control
+=== Programmatic Split Control
 
-```java
+[source,java]
+----
 import javafx.geometry.Orientation;
 import com.sithtermfx.ui.split.SplitRequest;
 
@@ -549,15 +567,16 @@ splitPane.toggleBroadcastMode();
 
 // Close everything
 splitPane.closeAll();
-```
+----
 
-### SSH Split with Connection Reuse
+=== SSH Split with Connection Reuse
 
 In a real SSH application, the `SplitConnectorFactory` inspects the
 `SplitRequest` to decide whether to open a new channel on the same server
 or prompt the user for a new connection:
 
-```java
+[source,java]
+----
 SplitConnectorFactory connectorFactory = request -> {
     if (request == null) {
         return createNewSshConnection();
@@ -581,13 +600,14 @@ SplitConnectorFactory connectorFactory = request -> {
             return null;
     }
 };
-```
+----
 
-### Adding Side Panels (e.g. Timestamp Gutter)
+=== Adding Side Panels (e.g. Timestamp Gutter)
 
 `TerminalSplitPane` supports optional left-side panels per widget:
 
-```java
+[source,java]
+----
 TerminalSplitPane splitPane = new TerminalSplitPane(
         settings,
         connectorFactory,
@@ -603,13 +623,14 @@ TerminalSplitPane splitPane = new TerminalSplitPane(
 // Or set/remove per widget later:
 splitPane.setWidgetLeftPanel(widget, new Label("panel"));
 splitPane.removeWidgetLeftPanel(widget);
-```
+----
 
-### Extra Context Menu Items
+=== Extra Context Menu Items
 
 Add application-specific entries to the built-in right-click menu:
 
-```java
+[source,java]
+----
 splitPane.setExtraMenuItemsFactory(widget -> {
     MenuItem reconnect = new MenuItem("Reconnect");
     reconnect.setOnAction(e -> reconnectWidget(widget));
@@ -619,31 +640,35 @@ splitPane.setExtraMenuItemsFactory(widget -> {
 
     return List.of(reconnect, timestamps);
 });
-```
+----
 
----
+'''
 
-## 8. Hyperlinks <a name="hyperlinks"></a>
+== 8. Hyperlinks
 
 SithTermFX can detect and highlight clickable links in terminal output.
 `DefaultHyperlinkFilter` detects URLs automatically:
 
-```java
+[source,java]
+----
 import com.sithtermfx.ui.DefaultHyperlinkFilter;
 
 widget.addHyperlinkFilter(new DefaultHyperlinkFilter());
-```
+----
 
 Hyperlink appearance is controlled by `UserSettingsProvider`:
 
-| Method                          | Purpose                               |
-|---------------------------------|---------------------------------------|
-| `getHyperlinkColor()`           | Custom color for detected links       |
-| `getHyperlinkHighlightingMode()`| `ALWAYS`, `HOVER`, or `NEVER`         |
+[cols="1,2",options="header"]
+|===
+| Method                           | Purpose
+| `getHyperlinkColor()`            | Custom color for detected links
+| `getHyperlinkHighlightingMode()` | `ALWAYS`, `HOVER`, or `NEVER`
+|===
 
 Override in your settings provider:
 
-```java
+[source,java]
+----
 @Override
 public TerminalColor getHyperlinkColor() {
     return new TerminalColor(100, 150, 255);  // light blue
@@ -653,15 +678,20 @@ public TerminalColor getHyperlinkColor() {
 public HyperlinkStyle.HighlightMode getHyperlinkHighlightingMode() {
     return HyperlinkStyle.HighlightMode.HOVER;
 }
-```
+----
 
----
+'''
 
-## 9. Terminal Lifecycle <a name="lifecycle"></a>
+== 9. Terminal Lifecycle
 
-### Startup Sequence
+The following diagram shows the complete startup, running, and shutdown flow:
 
-```
+image::lifecycle-diagram.png[Terminal Lifecycle,800]
+
+=== Startup Sequence
+
+[source,text]
+----
 SithTermFxWidget(columns, lines, settingsProvider)
         │
         ▼
@@ -672,51 +702,55 @@ SithTermFxWidget(columns, lines, settingsProvider)
         │
         ▼
    [Terminal is running]
-```
+----
 
-### Shutdown
+=== Shutdown
 
 Always close both the widget and the connector:
 
-```java
+[source,java]
+----
 stage.setOnCloseRequest(event -> {
     widget.close();                     // stops emulation threads
     widget.getTtyConnector().close();   // closes underlying process/connection
 });
-```
+----
 
 For split terminals:
 
-```java
+[source,java]
+----
 stage.setOnCloseRequest(event -> {
     splitPane.closeAll();   // closes all widgets and their connectors
 });
-```
+----
 
-### Session End Listener
+=== Session End Listener
 
 React when the remote side closes the connection (e.g. user typed `exit`):
 
-```java
+[source,java]
+----
 widget.addListener(terminalWidget -> {
     Platform.runLater(() -> {
         // e.g. close the tab, reconnect, show a message
         widget.close();
     });
 });
-```
+----
 
----
+'''
 
-## 10. Advanced Integration Patterns <a name="advanced"></a>
+== 10. Advanced Integration Patterns
 
 These patterns are extracted from the
-[korTTY](https://github.com/chardonnay/korTTY) SSH client, which is a
+https://github.com/chardonnay/korTTY[korTTY] SSH client, which is a
 production application built on SithTermFX.
 
-### Pattern: Custom Settings Provider with Per-Connection Override
+=== Pattern: Custom Settings Provider with Per-Connection Override
 
-```java
+[source,java]
+----
 public class AppSettingsProvider extends DynamicFontSizeSettingsProvider {
 
     private String fontFamily = "Menlo";
@@ -744,14 +778,15 @@ public class AppSettingsProvider extends DynamicFontSizeSettingsProvider {
         return new TerminalColor(204, 204, 204);
     }
 }
-```
+----
 
-### Pattern: Global Exception Handler for Known Bugs
+=== Pattern: Global Exception Handler for Known Bugs
 
 SithTermFX may occasionally throw a harmless `ClassCastException` from its
 internal animation timer. Suppress it globally:
 
-```java
+[source,java]
+----
 Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
     if (throwable instanceof ClassCastException) {
         String msg = throwable.getMessage();
@@ -762,13 +797,14 @@ Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
     }
     logger.error("Uncaught exception in {}", thread.getName(), throwable);
 });
-```
+----
 
-### Pattern: Font Zoom via Scene Accelerators
+=== Pattern: Font Zoom via Scene Accelerators
 
 Wire Ctrl/Cmd+Plus, Ctrl/Cmd+Minus, Ctrl/Cmd+0 to the settings provider:
 
-```java
+[source,java]
+----
 scene.getAccelerators().put(
     new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.SHORTCUT_DOWN),
     () -> settings.increaseFontSize(2));
@@ -780,11 +816,12 @@ scene.getAccelerators().put(
 scene.getAccelerators().put(
     new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.SHORTCUT_DOWN),
     () -> settings.resetFontSize());
-```
+----
 
-### Pattern: Apply Theme to All Split Panes
+=== Pattern: Apply Theme to All Split Panes
 
-```java
+[source,java]
+----
 public void applyTheme(TerminalSplitPane splitPane,
                         int fgR, int fgG, int fgB,
                         int bgR, int bgG, int bgB,
@@ -805,13 +842,14 @@ public void applyTheme(TerminalSplitPane splitPane,
         Platform.runLater(() -> widget.getTerminalPanel().repaint());
     }
 }
-```
+----
 
-### Pattern: Disconnect Callback on TtyConnector
+=== Pattern: Disconnect Callback on TtyConnector
 
 Add a disconnect listener to your connector so the UI can react:
 
-```java
+[source,java]
+----
 public interface DisconnectListener {
     void onDisconnected(String reason);
 }
@@ -832,54 +870,16 @@ public class SshTtyConnector implements TtyConnector {
         }
     }
 }
-```
+----
 
----
+'''
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────┐
-│                 Your Application                │
-│                                                 │
-│  ┌───────────────┐   ┌───────────────────────┐  │
-│  │SettingsProvider│   │   SplitConnectorFactory│  │
-│  │(colors, fonts) │   │   (creates sessions)  │  │
-│  └───────┬───────┘   └───────────┬───────────┘  │
-│          │                       │               │
-│          ▼                       ▼               │
-│  ┌───────────────────────────────────────────┐  │
-│  │           TerminalSplitPane               │  │
-│  │  ┌─────────────────┐ ┌─────────────────┐ │  │
-│  │  │ SithTermFxWidget │ │ SithTermFxWidget │ │  │
-│  │  │   (Terminal 1)   │ │   (Terminal 2)   │ │  │
-│  │  └────────┬────────┘ └────────┬────────┘ │  │
-│  └───────────┼───────────────────┼───────────┘  │
-│              │                   │               │
-│              ▼                   ▼               │
-│  ┌───────────────────┐ ┌───────────────────┐    │
-│  │  TtyConnector #1  │ │  TtyConnector #2  │    │
-│  │  (PTY / SSH / …)  │ │  (PTY / SSH / …)  │    │
-│  └───────────────────┘ └───────────────────┘    │
-└─────────────────────────────────────────────────┘
-
-sithtermfx-core:  TtyConnector, TerminalColor, TextStyle,
-                  SithTerminal, CursorShape, TermSize
-
-sithtermfx-ui:    SithTermFxWidget, TerminalPanel,
-                  TerminalSplitPane, SplitConnectorFactory,
-                  SplitRequest, DefaultSettingsProvider,
-                  DynamicFontSizeSettingsProvider,
-                  DefaultHyperlinkFilter
-```
-
----
-
-## Running the Built-in Examples
+== Running the Built-in Examples
 
 SithTermFX ships with ready-to-run examples:
 
-```bash
+[source,bash]
+----
 # Basic shell example
 mvn javafx:run -pl sithtermfx-app
 
@@ -888,9 +888,10 @@ mvn javafx:run -pl sithtermfx-app   # uncomment theme=dark in pom.xml
 
 # Split terminal example
 mvn javafx:run -pl sithtermfx-app -Psplit
-```
+----
 
 Source code:
-- [`BasicTerminalShellExample.java`](../sithtermfx-app/src/main/java/com/sithtermfx/app/example/BasicTerminalShellExample.java)
-- [`SplitTerminalShellExample.java`](../sithtermfx-app/src/main/java/com/sithtermfx/app/example/SplitTerminalShellExample.java)
-- [`BasicTerminalExample.java`](../sithtermfx-app/src/main/java/com/sithtermfx/app/example/BasicTerminalExample.java)
+
+* link:../sithtermfx-app/src/main/java/com/sithtermfx/app/example/BasicTerminalShellExample.java[BasicTerminalShellExample.java]
+* link:../sithtermfx-app/src/main/java/com/sithtermfx/app/example/SplitTerminalShellExample.java[SplitTerminalShellExample.java]
+* link:../sithtermfx-app/src/main/java/com/sithtermfx/app/example/BasicTerminalExample.java[BasicTerminalExample.java]
