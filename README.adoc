@@ -3,7 +3,6 @@
 :toc-title: Table of Contents
 :toclevels: 3
 :icons: font
-:imagesdir: docs/images
 
 SithTermFX is a terminal emulator for JavaFX.
 The project is a result of porting https://github.com/JetBrains/jediterm[JediTerm] (commit 8366f2b) with new features.

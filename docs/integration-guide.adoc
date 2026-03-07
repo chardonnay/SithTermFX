@@ -3,7 +3,6 @@
 :toc-title: Table of Contents
 :toclevels: 3
 :icons: font
-:imagesdir: images
 :source-highlighter: rouge
 
 This guide shows how to embed SithTermFX into your own JavaFX application.
@@ -19,7 +18,7 @@ toc::[]
 
 The following diagram shows the high-level architecture and how the main components interact:
 
-image::architecture-overview.png[Architecture Overview,800]
+image::images/architecture-overview.png[Architecture Overview,800]
 
 '''
 
@@ -368,7 +367,7 @@ widget.start();
 
 The following diagram shows the settings/theming hierarchy and the runtime color change flow:
 
-image::settings-theming.png[Settings and Theming,800]
+image::images/settings-theming.png[Settings and Theming,800]
 
 === Dark Theme
 
@@ -506,7 +505,7 @@ independent sessions, context menus, broadcast mode, and drag-and-drop reorderin
 
 The following diagram illustrates the internal split-cell tree and the resulting visual layout:
 
-image::split-terminal-structure.png[Split Terminal Structure,800]
+image::images/split-terminal-structure.png[Split Terminal Structure,800]
 
 === Basic Setup
 
@@ -686,7 +685,7 @@ public HyperlinkStyle.HighlightMode getHyperlinkHighlightingMode() {
 
 The following diagram shows the complete startup, running, and shutdown flow:
 
-image::lifecycle-diagram.png[Terminal Lifecycle,800]
+image::images/lifecycle-diagram.png[Terminal Lifecycle,800]
 
 === Startup Sequence
 
