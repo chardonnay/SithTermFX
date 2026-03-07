@@ -1,0 +1,103 @@
+package com.sithtermfx.app.example;
+
+import com.sithtermfx.app.DarkThemeSettingsProvider;
+import com.sithtermfx.app.pty.PtyProcessTtyConnector;
+import com.sithtermfx.core.TtyConnector;
+import com.sithtermfx.ui.SithTermFxWidget;
+import com.sithtermfx.ui.split.SplitConnectorFactory;
+import com.sithtermfx.ui.split.SplitRequest;
+import com.sithtermfx.ui.split.TerminalSplitPane;
+import com.pty4j.PtyProcess;
+import com.pty4j.PtyProcessBuilder;
+import org.jetbrains.annotations.Nullable;
+
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+import com.sithtermfx.core.util.Platform;
+import com.sithtermfx.ui.DefaultHyperlinkFilter;
+import com.sithtermfx.ui.settings.MutableFontSizeProvider;
+import javafx.application.Application;
+import javafx.scene.Scene;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.stage.Stage;
+
+/**
+ * Demo application showing TerminalSplitPane with nested splits.
+ * Right-click in the terminal to split horizontally or vertically.
+ * Each split gets its own local shell session.
+ */
+public class SplitTerminalShellExample extends Application {
+
+    @Override
+    public void start(Stage stage) {
+        DarkThemeSettingsProvider settingsProvider = new DarkThemeSettingsProvider();
+        SplitConnectorFactory connectorFactory = request -> createTtyConnector();
+
+        TerminalSplitPane splitPane = new TerminalSplitPane(settingsProvider, connectorFactory, widget -> {
+            widget.addHyperlinkFilter(new DefaultHyperlinkFilter());
+        });
+
+        stage.setTitle("Split Terminal Shell Example");
+        stage.setOnCloseRequest(e -> {
+            splitPane.closeAll();
+        });
+
+        Scene scene = new Scene(splitPane, 800, 600);
+        var splitPaneCss = SplitTerminalShellExample.class.getResource("split-pane.css");
+        if (splitPaneCss != null) {
+            scene.getStylesheets().add(splitPaneCss.toExternalForm());
+        }
+        // Font zoom via Scene accelerators (more reliable than KeyEvent on Mac)
+        if (settingsProvider instanceof MutableFontSizeProvider) {
+            MutableFontSizeProvider fontProvider = (MutableFontSizeProvider) settingsProvider;
+            Runnable zoomIn = () -> fontProvider.increaseFontSize(2);
+            Runnable zoomOut = () -> fontProvider.decreaseFontSize(2);
+            Runnable zoomReset = fontProvider::resetFontSize;
+            // SHORTCUT = Cmd on Mac, Ctrl on Win/Linux
+            // Zoom In: Cmd/Ctrl + Plus (EQUALS, ADD, or with Shift)
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.EQUALS, KeyCombination.SHIFT_DOWN, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.ADD, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.PLUS, KeyCombination.SHORTCUT_DOWN), zoomIn);
+            // Zoom Out: Cmd/Ctrl + Minus
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.MINUS, KeyCombination.SHORTCUT_DOWN), zoomOut);
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.SUBTRACT, KeyCombination.SHORTCUT_DOWN), zoomOut);
+            // Reset: Cmd/Ctrl + 0
+            scene.getAccelerators().put(new KeyCodeCombination(KeyCode.DIGIT0, KeyCombination.SHORTCUT_DOWN), zoomReset);
+        }
+        splitPane.prefWidthProperty().bind(scene.widthProperty());
+        splitPane.prefHeightProperty().bind(scene.heightProperty());
+        splitPane.setMinSize(0, 0);
+        splitPane.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        stage.setScene(scene);
+        stage.show();
+        stage.toFront();
+        stage.requestFocus();
+    }
+
+    private @Nullable TtyConnector createTtyConnector() {
+        try {
+            Map<String, String> envs = System.getenv();
+            String[] command;
+            if (Platform.isWindows()) {
+                command = new String[]{"cmd.exe"};
+            } else {
+                command = new String[]{"/bin/bash", "--login"};
+                envs = new HashMap<>(System.getenv());
+                envs.put("TERM", "xterm-256color");
+            }
+            PtyProcess process = new PtyProcessBuilder().setCommand(command).setEnvironment(envs).start();
+            return new PtyProcessTtyConnector(process, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}

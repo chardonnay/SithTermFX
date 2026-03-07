@@ -1,17 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>com.techsenger.maven.root</groupId>
-        <artifactId>maven-root</artifactId>
-        <version>1.6.0-SNAPSHOT</version>
-    </parent>
-
-    <groupId>com.techsenger.jeditermfx</groupId>
-    <artifactId>jeditermfx</artifactId>
+    <groupId>com.sithtermfx</groupId>
+    <artifactId>sithtermfx</artifactId>
     <version>1.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>JediTermFX</name>
+    <name>SithTermFX</name>
     <description>Terminal emulator for JavaFX</description>
 
     <licenses>
@@ -19,29 +13,25 @@
             <name>Apache 2.0 License</name>
             <url>https://www.apache.org/licenses/LICENSE-2.0</url>
         </license>
-        <license>
-            <name>LGPLv3</name>
-            <url>https://www.gnu.org/licenses/lgpl-3.0.en.html</url>
-        </license>
     </licenses>
 
-    <url>https://github.com/techsenger/jeditermfx</url>
+    <url>https://github.com/chardonnay/SithTermFX</url>
 
     <scm>
-        <connection>scm:git:https://github.com/techsenger/jeditermfx.git</connection>
-        <developerConnection>scm:git:https://github.com/techsenger/jeditermfx.git</developerConnection>
-        <url>https://github.com/techsenger/jeditermfx</url>
+        <connection>scm:git:https://github.com/chardonnay/SithTermFX.git</connection>
+        <developerConnection>scm:git:https://github.com/chardonnay/SithTermFX.git</developerConnection>
+        <url>https://github.com/chardonnay/SithTermFX</url>
     </scm>
 
     <issueManagement>
         <system>GitHub</system>
-        <url>https://github.com/techsenger/jeditermfx/issues</url>
+        <url>https://github.com/chardonnay/SithTermFX/issues</url>
     </issueManagement>
 
     <developers>
         <developer>
-            <id>pcastornii</id>
-            <name>Pavel Castornii</name>
+            <id>danielmengel</id>
+            <name>Daniel Mengel</name>
         </developer>
     </developers>
 
@@ -54,7 +44,13 @@
         <annotations.version>24.0.1</annotations.version>
         <pty4j.version>0.12.25</pty4j.version>
         <javafx.version>19.0.2.1</javafx.version>
-        <publishing.plugin.exclusions>jeditermfx-app</publishing.plugin.exclusions>
+        <javafx.plugin.version>0.0.8</javafx.plugin.version>
+        <assembly.plugin.version>3.7.1</assembly.plugin.version>
+        <slf4j.version>2.0.17</slf4j.version>
+        <log4j.version>2.25.2</log4j.version>
+        <junit.version>5.12.2</junit.version>
+        <maven.compiler.release>17</maven.compiler.release>
+        <publishing.plugin.exclusions>sithtermfx-app</publishing.plugin.exclusions>
     </properties>
 
     <repositories>
@@ -62,37 +58,19 @@
             <id>JetBrains</id>
             <url>https://packages.jetbrains.team/maven/p/ij/intellij-dependencies</url>
         </repository>
-        <repository>
-            <id>repsy-snapshots</id>
-            <url>https://repo.repsy.io/mvn/techsenger/snapshots</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-        </repository>
     </repositories>
 
     <dependencyManagement>
         <dependencies>
+            <!--### SithTermFX ###-->
             <dependency>
-                <groupId>com.techsenger.osp.bom</groupId>
-                <artifactId>osp-bom</artifactId>
-                <version>1.7.0-SNAPSHOT</version>
-                <scope>import</scope>
-                <type>pom</type>
-            </dependency>
-
-            <!--### JediTermFX ###-->
-            <dependency>
-                <groupId>com.techsenger.jeditermfx</groupId>
-                <artifactId>jeditermfx-core</artifactId>
+                <groupId>com.sithtermfx</groupId>
+                <artifactId>sithtermfx-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.techsenger.jeditermfx</groupId>
-                <artifactId>jeditermfx-ui</artifactId>
+                <groupId>com.sithtermfx</groupId>
+                <artifactId>sithtermfx-ui</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -152,13 +130,88 @@
                 <version>${jna.version}</version>
                 <scope>runtime</scope>
             </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-api</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-core</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-slf4j2-impl</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
+    <profiles>
+        <profile>
+            <id>release-central</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <modules>
-        <module>jeditermfx-core</module>
-        <module>jeditermfx-ui</module>
-        <module>jeditermfx-app</module>
+        <module>sithtermfx-core</module>
+        <module>sithtermfx-ui</module>
+        <module>sithtermfx-app</module>
     </modules>
 </project>
 

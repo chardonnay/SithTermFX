@@ -5,12 +5,12 @@
 - **URI/URL opening**: Fixed. Only whitelisted schemes (http, https, mailto, ftp, ftps, news) are opened via `Desktop.browse()`. Prevents opening `file://`, `javascript:`, `data:`, etc. from selected text or hyperlinks.
 - **Process execution**: Uses `PtyProcessBuilder` / `ProcessBuilder` with fixed or app-controlled commands (e.g. shell, debug tools). No user-controlled command injection identified.
 - **Deserialization**: No `readObject`/`ObjectInputStream` usage found.
-- **Locks**: Lock/unlock pairs in TerminalTextBuffer and JediTerminal are used in try/finally; no obvious leak.
+- **Locks**: Lock/unlock pairs in TerminalTextBuffer and SithTerminal are used in try/finally; no obvious leak.
 - **Clipboard**: Copy/paste uses system clipboard; content is not executed, only displayed/pasted as text.
 
 ## Change
 
-- **SafeUriOpen**: New helper in `jeditermfx-ui` that validates URI scheme before opening. Used in `TerminalPanel.openSelectedTextAsURL()`, `TerminalPanel.isSelectedTextUrl()`, and `DefaultHyperlinkFilter` (hyperlink click). Rejected schemes are not opened; hyperlinks with disallowed schemes are not made clickable.
+- **SafeUriOpen**: New helper in `sithtermfx-ui` that validates URI scheme before opening. Used in `TerminalPanel.openSelectedTextAsURL()`, `TerminalPanel.isSelectedTextUrl()`, and `DefaultHyperlinkFilter` (hyperlink click). Rejected schemes are not opened; hyperlinks with disallowed schemes are not made clickable.
 
 ## Verification
 
