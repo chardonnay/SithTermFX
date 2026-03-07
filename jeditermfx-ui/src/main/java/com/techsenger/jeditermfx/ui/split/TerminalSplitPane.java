@@ -693,6 +693,9 @@ public class TerminalSplitPane extends StackPane {
      * Closes all terminal sessions in this split pane.
      */
     public void closeAll() {
+        if (rootCell == null) {
+            return;
+        }
         rootCell.closeAll();
     }
 

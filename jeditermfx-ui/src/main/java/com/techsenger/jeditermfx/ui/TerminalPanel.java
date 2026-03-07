@@ -1981,13 +1981,9 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     public boolean isSelectedTextUrl() {
         String selectedText = getSelectedText();
         if (selectedText != null) {
-            try {
-                URI uri = new URI(selectedText);
-                //noinspection ResultOfMethodCallIgnored
-                uri.toURL();
+            URI uri = SafeUriOpen.validateForBrowse(selectedText);
+            if (uri != null) {
                 return true;
-            } catch (Exception e) {
-                //pass
             }
         }
         return false;
@@ -2010,13 +2006,17 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             try {
                 String selectedText = getSelectedText();
                 if (selectedText != null) {
-                    EventQueue.invokeLater(() -> {
-                        try {
-                            Desktop.getDesktop().browse(new URI(selectedText));
-                        } catch (Exception ex) {
-                            logger.error("Error opening url: {}", selectedText, ex);
-                        }
-                    });
+                    URI uri = SafeUriOpen.validateForBrowse(selectedText);
+                    if (uri != null) {
+                        EventQueue.invokeLater(() -> {
+                            try {
+                                Desktop.getDesktop().browse(uri);
+                            } catch (Exception ex) {
+                                logger.error("Error opening url: {}", selectedText, ex);
+                            }
+                        });
+                        return true;
+                    }
                 }
             } catch (Exception e) {
                 //ok then

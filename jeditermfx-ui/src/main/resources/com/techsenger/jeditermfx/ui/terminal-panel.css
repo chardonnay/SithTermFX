@@ -17,8 +17,8 @@
 .scroll-bar.terminal-scroll-bar .thumb:pressed {
     -fx-background-color: #707070;
 }
-.scroll-bar.terminal-scroll-bar.increment-button,
-.scroll-bar.terminal-scroll-bar.decrement-button {
+.scroll-bar.terminal-scroll-bar > .increment-button,
+.scroll-bar.terminal-scroll-bar > .decrement-button {
     -fx-background-color: transparent;
     -fx-padding: 0.25em;
 }

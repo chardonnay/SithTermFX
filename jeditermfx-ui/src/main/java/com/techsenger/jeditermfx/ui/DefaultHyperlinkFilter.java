@@ -64,13 +64,16 @@ public class DefaultHyperlinkFilter implements HyperlinkFilter {
                 }
             }
             String url = m.group();
+            URI safeUri = SafeUriOpen.validateForBrowse(url);
+            if (safeUri == null) continue;
+            URI uriToOpen = safeUri;
             item = new LinkResultItem(textStartOffset + m.start(), textStartOffset + m.end(), new LinkInfo(() -> {
                 try {
                     var d = Desktop.getDesktop();
                     if (d != null) {
                         EventQueue.invokeLater(() -> {
                             try {
-                                d.browse(new URI(url));
+                                d.browse(uriToOpen);
                             } catch (Exception ex) {
                                 logger.error("Error opening url: {}", url, ex);
                             }
