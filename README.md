@@ -23,6 +23,7 @@ any JavaFX application. A detailed comparison of terminal libraries is provided 
 * [Running the Application](#application)
     * [Using Maven](#application-maven)
     * [Using Distro](#application-distro)
+* [Integration Guide](#integration-guide)
 * [Public API](#public-api)
 * [License](#license)
 * [Contributing](#contributing)
@@ -158,6 +159,13 @@ This will make SithTermFX use the `DarkThemeSettingsProvider`.
 After building the project, you will find a distribution archive named `sithtermfx-app-<version>.tar` in the
 `sithtermfx-app/target` directory. Extracting this file will allow you to launch the application
 using `.sh` or `.bat` scripts depending on your operating system.
+
+## Integration Guide <a name="integration-guide"></a>
+
+A comprehensive guide for embedding SithTermFX into your own JavaFX application is available
+in [`docs/integration-guide.md`](docs/integration-guide.md). It covers dependencies, minimal setup,
+SSH connectors, theming, dynamic font size, split terminals, hyperlinks, and advanced patterns
+extracted from the [korTTY](https://github.com/chardonnay/korTTY) SSH client.
 
 ## License <a name="license"></a>
 
