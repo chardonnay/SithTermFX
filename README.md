@@ -1,8 +1,7 @@
 # SithTermFX
 
 SithTermFX is a terminal emulator for JavaFX. The project is a result of porting
-[JediTerm](https://github.com/JetBrains/jediterm) (commit 8366f2b) from Swing to JavaFX. SithTermFX exclusively
-utilizes JavaFX components. Therefore, the Terminal Emulator based on this library can be seamlessly integrated into
+[JediTerm](https://github.com/JetBrains/jediterm) (commit 8366f2b) with new features. Therefore, the Terminal Emulator based on this library can be seamlessly integrated into
 any JavaFX application. A detailed comparison of terminal libraries is provided below.
 
 ## Table of Contents
