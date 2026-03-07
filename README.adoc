@@ -1,0 +1,196 @@
+= SithTermFX
+:toc: macro
+:toc-title: Table of Contents
+:toclevels: 3
+:icons: font
+:imagesdir: docs/images
+
+SithTermFX is a terminal emulator for JavaFX.
+The project is a result of porting https://github.com/JetBrains/jediterm[JediTerm] (commit 8366f2b) with new features.
+Therefore, the Terminal Emulator based on this library can be seamlessly integrated into any JavaFX application.
+A detailed comparison of terminal libraries is provided below.
+
+toc::[]
+
+== Features
+
+* Local terminal for Unix, Mac and Windows using Pty4J
+* Xterm emulation — passes most of tests from vttest
+* Xterm 256 colours
+* Scrolling
+* Copy/Paste
+* Mouse support
+* Terminal resizing from client or server side
+* Terminal tabs
+* *Dynamic font size* — Adjust font size at runtime via Ctrl+Plus/Minus (Cmd+Plus/Minus on Mac) without disconnecting
+* *Split screen* — Nested horizontal/vertical splits with independent sessions per pane
+* *Reorder split panes* — Drag a split terminal onto another to move it above, below, left, or right; drop zones show possible positions while dragging
+
+== Terminal Comparison
+
+[cols="1,1,1,1",options="header"]
+|===
+| Terminal        | SithTermFX | https://github.com/JetBrains/jediterm[JediTerm] | https://github.com/javaterminal/TerminalFX[TerminalFX]
+| GUI Library     | JavaFX     | Swing          | JavaFX
+| Main Component  | Canvas     | JComponent     | WebView
+| Languages       | Java       | Java, Kotlin   | Java, JS
+| JPMS Support    | Yes        | No             | Yes
+|===
+
+== Usage
+
+It is recommended to start working with SithTermFX by studying and running the
+link:sithtermfx-app/src/main/java/com/sithtermfx/app/example/BasicTerminalShellExample.java[BasicTerminalShellExample] class.
+This class contains the minimal code needed to launch a terminal in a JavaFX application.
+
+=== Dependencies
+
+Maven Central publication is prepared and will be used for releases.
+Until the first Central release is published, build from source as described below.
+
+[source,xml]
+----
+<dependency>
+    <groupId>com.sithtermfx</groupId>
+    <artifactId>sithtermfx-core</artifactId>
+    <version>${sithtermfx.version}</version>
+</dependency>
+<dependency>
+    <groupId>com.sithtermfx</groupId>
+    <artifactId>sithtermfx-ui</artifactId>
+    <version>${sithtermfx.version}</version>
+</dependency>
+----
+
+=== Dark Theme
+
+If you need a dark theme, you should override the `getDefaultForeground()` and `getDefaultBackground()` methods in
+`UserSettingsProvider`.
+To run the demo application in dark theme see <<application-maven>>.
+
+=== Dynamic Font Size
+
+Use `DynamicFontSizeSettingsProvider` (or extend it) to enable runtime font resizing without disconnecting the terminal:
+
+* *Ctrl+Plus* / *Ctrl+Minus* (Cmd on Mac) — Increase/decrease font size
+* *Ctrl+0* (Cmd+0 on Mac) — Reset to default size
+
+Font size range is configurable via `getMinFontSize()` and `getMaxFontSize()` in `UserSettingsProvider` (default 8–72 pt).
+
+=== Split Screen
+
+Use `TerminalSplitPane` for nested horizontal/vertical splits.
+Right-click in the terminal to access the context menu:
+
+* *Split right (same server)* / *Split right (new connection)* — Split horizontally
+* *Split down (same server)* / *Split down (new connection)* — Split vertically
+* *Close split* — Close the focused pane
+
+*Reorder panes by drag-and-drop:* Drag a split terminal with the mouse onto another pane.
+While dragging, four drop zones (above, below, left, right) are shown; the zone under the cursor is highlighted.
+Release to move the pane to that position.
+
+Implement `SplitConnectorFactory` to provide new `TtyConnector` instances.
+The `SplitRequest` contains the chosen mode (SAME_SERVER_NEW_SHELL vs NEW_CONNECTION) and the parent widget for reusing connections.
+
+See link:sithtermfx-app/src/main/java/com/sithtermfx/app/example/SplitTerminalShellExample.java[SplitTerminalShellExample] for a demo.
+
+=== Hyperlinks
+
+SithTermFX provides a wide range of features when working with links.
+The `HighlightMode` enumeration specifies multiple modes of working with links and their colors.
+In the `ALWAYS` modes, links are always underlined and always clickable.
+In the `NEVER` modes, links are never underlined and never clickable.
+In the `HOVER` modes, links become underlined and clickable only when hovered over.
+Now let's clarify the difference between the two types of colors.
+`CUSTOM` colors are those set by the SithTermFX user in the `getHyperlinkColor()` method of the settings.
+`ORIGINAL` colors are those offered by the program running in the terminal.
+Thus, links can use either custom colors or the original text colors.
+
+== Public API
+
+Public API documentation for integrators is available in link:docs/public-api.adoc[docs/public-api.adoc].
+It defines stable packages, recommended entry points, and compatibility rules for upgrades.
+
+== Code Building
+
+To build the library use standard Git and Maven commands:
+
+[source,bash]
+----
+git clone https://github.com/chardonnay/SithTermFX.git
+cd SithTermFX
+mvn clean install
+----
+
+[[application]]
+== Running the Application
+
+The project contains a demo application that shows how to use this library.
+There are two ways to run the application.
+
+[[application-maven]]
+=== Using Maven
+
+Build the project from the root first (required so all modules are available on the classpath):
+
+[source,bash]
+----
+git clone https://github.com/chardonnay/SithTermFX.git
+cd SithTermFX
+mvn clean install
+----
+
+Then run the main application:
+
+[source,bash]
+----
+mvn javafx:run -pl sithtermfx-app
+----
+
+To run the *Split Terminal* demo (nested splits and drag-and-drop reordering):
+
+[source,bash]
+----
+mvn javafx:run -pl sithtermfx-app -Psplit
+----
+
+Debugger settings are in `sithtermfx-app/pom.xml`.
+To try a dark theme, uncomment the following line in the JavaFX plugin configuration:
+
+[source,xml]
+----
+<!--<commandlineArgs>theme=dark</commandlineArgs>-->
+----
+
+This will make SithTermFX use the `DarkThemeSettingsProvider`.
+
+=== Using Distro
+
+After building the project, you will find a distribution archive named `sithtermfx-app-<version>.tar` in the
+`sithtermfx-app/target` directory.
+Extracting this file will allow you to launch the application using `.sh` or `.bat` scripts depending on your operating system.
+
+== Integration Guide
+
+A comprehensive guide for embedding SithTermFX into your own JavaFX application is available
+in link:docs/integration-guide.adoc[docs/integration-guide.adoc].
+It covers dependencies, minimal setup, SSH connectors, theming, dynamic font size, split terminals,
+hyperlinks, and advanced patterns extracted from the https://github.com/chardonnay/korTTY[korTTY] SSH client.
+
+== License
+
+SithTermFX is licensed under the Apache License 2.0.
+See `LICENSE-APACHE-2.0.txt`.
+
+== Contributing
+
+We welcome all contributions.
+You can help by reporting bugs, suggesting improvements, or submitting pull requests with fixes and new features.
+If you have any questions, feel free to reach out — we'll be happy to assist you.
+
+== Support Us
+
+You can support our open-source work through https://github.com/sponsors/chardonnay[GitHub Sponsors].
+Your contribution helps us maintain projects, develop new features, and provide ongoing improvements.
+Multiple sponsorship tiers are available, each offering different levels of recognition and benefits.
