@@ -1,0 +1,168 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (for example v1.0.1)"
+        required: true
+        type: string
+      target_ref:
+        description: "Git ref to build and tag"
+        required: false
+        default: "master"
+        type: string
+      prerelease:
+        description: "Mark the GitHub release as prerelease"
+        required: false
+        default: false
+        type: boolean
+      publish_release:
+        description: "Create or update tag and GitHub release"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      BUILD_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.ref_name }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.BUILD_REF }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: "maven"
+
+      - name: Ensure Maven is available
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if command -v mvn >/dev/null 2>&1; then
+            mvn -version
+            exit 0
+          fi
+
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y maven
+          else
+            apt-get update
+            apt-get install -y maven
+          fi
+
+          mvn -version
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            TAG_NAME="${{ inputs.tag_name }}"
+            PRERELEASE="${{ inputs.prerelease }}"
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+            if [[ "${TAG_NAME}" == *"-"* ]]; then
+              PRERELEASE=true
+            else
+              PRERELEASE=false
+            fi
+          fi
+
+          if [[ ! "${TAG_NAME}" =~ ^v[0-9].* ]]; then
+            echo "Release tags must start with v, for example v1.0.0" >&2
+            exit 1
+          fi
+
+          VERSION="${TAG_NAME#v}"
+
+          {
+            echo "tag_name=${TAG_NAME}"
+            echo "version=${VERSION}"
+            echo "prerelease=${PRERELEASE}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Create tag for manual release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${{ steps.meta.outputs.tag_name }}"
+
+          if git ls-remote --tags origin "refs/tags/${TAG_NAME}" | grep -q "${TAG_NAME}"; then
+            echo "Tag ${TAG_NAME} already exists on origin"
+          else
+            git tag "${TAG_NAME}"
+            git push origin "refs/tags/${TAG_NAME}"
+          fi
+
+      - name: Build release artifacts
+        shell: bash
+        run: mvn -B -ntp clean install
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+          cp sithtermfx-core/target/*.jar release-assets/
+          cp sithtermfx-ui/target/*.jar release-assets/
+          cp sithtermfx-app/target/*.jar release-assets/
+          cp sithtermfx-app/target/*.tar release-assets/
+
+          {
+            echo "## Release assets"
+            echo
+            find release-assets -maxdepth 1 -type f -exec basename {} \; | sort | sed 's/^/- /'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ steps.meta.outputs.tag_name }}
+          path: release-assets/*
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        if: github.event_name != 'workflow_dispatch' || inputs.publish_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${{ steps.meta.outputs.tag_name }}"
+          TITLE="SithTermFX ${TAG_NAME}"
+          PRERELEASE="${{ steps.meta.outputs.prerelease }}"
+
+          PRERELEASE_FLAG=()
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            PRERELEASE_FLAG+=(--prerelease)
+          fi
+
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" release-assets/* --clobber
+          else
+            gh release create "${TAG_NAME}" release-assets/* \
+              --title "${TITLE}" \
+              --generate-notes \
+              "${PRERELEASE_FLAG[@]}"
+          fi
