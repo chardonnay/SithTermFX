@@ -775,7 +775,7 @@ public class SithEmulator extends DataStreamIteratingEmulator {
         return true;
     }
 
-    private boolean sendDeviceAttributes() {
+    protected boolean sendDeviceAttributes() {
         if (logger.isDebugEnabled()) {
             logger.debug("Identifying to remote system as VT102");
         }

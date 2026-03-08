@@ -1,0 +1,56 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#2d3436",
+    "primaryTextColor": "#dfe6e9",
+    "primaryBorderColor": "#636e72",
+    "lineColor": "#b2bec3",
+    "fontFamily": "Menlo, Consolas, monospace",
+    "fontSize": "13px"
+  },
+  "flowchart": {
+    "nodeSpacing": 30,
+    "rankSpacing": 40,
+    "curve": "basis",
+    "padding": 14
+  }
+}}%%
+
+graph TD
+    classDef appNode fill:#00b894,stroke:#55efc4,color:#2d3436,stroke-width:2px
+    classDef splitNode fill:#6c5ce7,stroke:#a29bfe,color:#dfe6e9,stroke-width:2px
+    classDef widgetNode fill:#d63031,stroke:#ff7675,color:#dfe6e9,stroke-width:2px
+    classDef connNode fill:#e17055,stroke:#fab1a0,color:#2d3436,stroke-width:2px
+    classDef moduleNode fill:#636e72,stroke:#b2bec3,color:#dfe6e9,stroke-width:2px,stroke-dasharray:5 5
+
+    subgraph APP["Your Application"]
+        direction TB
+        SP["<b>SettingsProvider</b><br/>colors, fonts"]:::appNode
+        SCF["<b>SplitConnectorFactory</b><br/>creates sessions"]:::appNode
+
+        subgraph TSP["TerminalSplitPane"]
+            direction TB
+            W1["<b>SithTermFxWidget</b><br/>Terminal 1"]:::widgetNode
+            W2["<b>SithTermFxWidget</b><br/>Terminal 2"]:::widgetNode
+        end
+
+        TC1["<b>TtyConnector #1</b><br/>PTY / SSH"]:::connNode
+        TC2["<b>TtyConnector #2</b><br/>PTY / SSH"]:::connNode
+
+        SP --> TSP
+        SCF --> TSP
+        W1 --> TC1
+        W2 --> TC2
+    end
+
+    subgraph MODULES[" "]
+        direction LR
+        CORE["<b>sithtermfx-core</b><br/>TtyConnector, TerminalColor,<br/>TextStyle, SithTerminal,<br/>CursorShape, TermSize"]:::moduleNode
+        UI["<b>sithtermfx-ui</b><br/>SithTermFxWidget, TerminalPanel,<br/>TerminalSplitPane,<br/>SplitConnectorFactory"]:::moduleNode
+    end
+
+    APP ~~~ MODULES
+
+    style APP fill:none,stroke:#0984e3,stroke-width:2px
+    style TSP fill:none,stroke:#6c5ce7,stroke-width:2px
+    style MODULES fill:none,stroke:none

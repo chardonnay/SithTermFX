@@ -1,0 +1,62 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#2d3436",
+    "primaryTextColor": "#dfe6e9",
+    "primaryBorderColor": "#636e72",
+    "lineColor": "#b2bec3",
+    "fontFamily": "Menlo, Consolas, monospace",
+    "fontSize": "13px"
+  },
+  "flowchart": {
+    "nodeSpacing": 20,
+    "rankSpacing": 35,
+    "curve": "basis",
+    "padding": 12
+  }
+}}%%
+
+graph TD
+    classDef startupNode fill:#00b894,stroke:#55efc4,color:#2d3436,stroke-width:2px
+    classDef runNode fill:#00cec9,stroke:#81ecec,color:#2d3436,stroke-width:2px
+    classDef callbackNode fill:#fdcb6e,stroke:#ffeaa7,color:#2d3436,stroke-width:2px
+    classDef shutdownNode fill:#636e72,stroke:#b2bec3,color:#dfe6e9,stroke-width:2px
+    classDef stateGood fill:#00b894,stroke:#55efc4,color:#2d3436,stroke-width:3px
+    classDef stateBad fill:#d63031,stroke:#ff7675,color:#dfe6e9,stroke-width:3px
+
+    subgraph STARTUP["Startup Sequence"]
+        direction TB
+        S1["new SithTermFxWidget<br/>(cols, lines, settingsProvider)"]:::startupNode
+        S2["widget.setTtyConnector<br/>(connector)"]:::startupNode
+        S3["widget.start()"]:::startupNode
+        S1 --> S2 --> S3
+    end
+
+    RUNNING(["<b>Terminal is Running</b>"]):::stateGood
+    S3 --> RUNNING
+
+    subgraph CALLBACK["Session End Callback"]
+        direction TB
+        C1["widget.addListener<br/>(callback)"]:::callbackNode
+        C2["Platform.runLater →<br/>reconnect / close tab"]:::callbackNode
+        C1 --> C2
+    end
+
+    RUNNING -.->|"session ends"| C1
+
+    subgraph SHUTDOWN["Shutdown Sequence"]
+        direction TB
+        D1["User closes /<br/>session ends"]:::shutdownNode
+        D2["widget.close()<br/>stops emulation threads"]:::shutdownNode
+        D3["connector.close()<br/>closes PTY / SSH"]:::shutdownNode
+        D1 --> D2 --> D3
+    end
+
+    STOPPED(["<b>Terminal Stopped</b>"]):::stateBad
+
+    RUNNING -->|"close requested"| D1
+    D3 --> STOPPED
+
+    style STARTUP fill:none,stroke:#55efc4,stroke-width:1px,stroke-dasharray:3 3
+    style CALLBACK fill:none,stroke:#ffeaa7,stroke-width:1px,stroke-dasharray:3 3
+    style SHUTDOWN fill:none,stroke:#b2bec3,stroke-width:1px,stroke-dasharray:3 3

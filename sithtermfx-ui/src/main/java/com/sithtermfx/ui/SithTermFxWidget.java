@@ -10,6 +10,7 @@ import com.sithtermfx.core.TerminalStarter;
 import com.sithtermfx.core.TextStyle;
 import com.sithtermfx.core.TtyBasedArrayDataStream;
 import com.sithtermfx.core.TtyConnector;
+import com.sithtermfx.core.emulator.EmulationType;
 import com.sithtermfx.core.model.JediTermDebouncerImpl;
 import com.sithtermfx.core.model.SithTerminal;
 import com.sithtermfx.core.model.StyleState;
@@ -68,6 +69,8 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
 //TODO
 //  @SuppressWarnings("removal")
 //  private final PreConnectHandler myPreConnectHandler;
+
+    private EmulationType myEmulationType = EmulationType.XTERM;
 
     private TtyConnector myTtyConnector;
 
@@ -224,6 +227,14 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
         return myTypeAheadManager;
     }
 
+    public void setEmulationType(@NotNull EmulationType emulationType) {
+        myEmulationType = emulationType;
+    }
+
+    public @NotNull EmulationType getEmulationType() {
+        return myEmulationType;
+    }
+
     public void setTtyConnector(@NotNull TtyConnector ttyConnector) {
         myTtyConnector = ttyConnector;
         TypeAheadTerminalModel.ShellType shellType;
@@ -242,7 +253,7 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
     protected TerminalStarter createTerminalStarter(@NotNull SithTerminal terminal, @NotNull TtyConnector connector) {
         return new TerminalStarter(terminal, connector,
                 new TtyBasedArrayDataStream(connector, myTypeAheadManager::onTerminalStateChanged), myTypeAheadManager,
-                getExecutorServiceManager());
+                getExecutorServiceManager(), myEmulationType);
     }
 
     @Override

@@ -11,22 +11,61 @@ toc::[]
 
 The following packages are considered public and stable within a major version:
 
-* `com.sithtermfx.core`
-* `com.sithtermfx.core.model`
-* `com.sithtermfx.core.model.hyperlinks`
-* `com.sithtermfx.core.emulator`
-* `com.sithtermfx.core.emulator.mouse`
-* `com.sithtermfx.core.typeahead`
-* `com.sithtermfx.ui`
-* `com.sithtermfx.ui.settings`
-* `com.sithtermfx.ui.split`
+* `com.sithtermfx.core` — Core terminal abstractions (`TtyConnector`, `Terminal`, `TerminalStarter`)
+* `com.sithtermfx.core.model` — Terminal model (`SithTerminal`, `StyleState`, `TerminalTextBuffer`)
+* `com.sithtermfx.core.model.hyperlinks` — Hyperlink detection and rendering
+* `com.sithtermfx.core.emulator` — Emulation framework (`EmulationType`, `EmulatorFactory`, `Emulator`)
+* `com.sithtermfx.core.emulator.mouse` — Mouse protocol support
+* `com.sithtermfx.core.emulator.tn3270` — IBM TN3270/TN3270E protocol and emulator
+* `com.sithtermfx.core.emulator.tn5250` — IBM TN5250/TN5250E protocol and emulator
+* `com.sithtermfx.core.emulator.wyse` — Wyse 50/60/160 terminal emulators
+* `com.sithtermfx.core.emulator.tvi` — TeleVideo 910/920/925 terminal emulators
+* `com.sithtermfx.core.emulator.hp` — HP 2392 and HP 700/92 terminal emulators
+* `com.sithtermfx.core.emulator.petscii` — Commodore PETSCII terminal emulator
+* `com.sithtermfx.core.typeahead` — Type-ahead prediction
+* `com.sithtermfx.ui` — JavaFX terminal widget
+* `com.sithtermfx.ui.settings` — Settings and theming
+* `com.sithtermfx.ui.split` — Split terminal panes
 
 == Recommended Entry Points
 
 * Core terminal abstractions from `com.sithtermfx.core`
 * JavaFX terminal widget from `com.sithtermfx.ui.SithTermFxWidget`
+* *Emulation type selection* via `com.sithtermfx.core.emulator.EmulationType`
+* *Emulator creation* via `com.sithtermfx.core.emulator.EmulatorFactory`
+* *TN3270 connections* via `com.sithtermfx.core.emulator.tn3270.Tn3270TtyConnector`
+* *TN5250 connections* via `com.sithtermfx.core.emulator.tn5250.Tn5250TtyConnector`
 * User configuration via `com.sithtermfx.ui.settings.UserSettingsProvider`
 * Split integration via `com.sithtermfx.ui.split.TerminalSplitPane`
+
+== Emulation Types
+
+The `EmulationType` enum defines all 21 supported terminal emulations.
+Use `SithTermFxWidget.setEmulationType()` before calling `start()`:
+
+[source,java]
+----
+widget.setEmulationType(EmulationType.VT220);
+----
+
+For block-mode terminals, use the dedicated `TtyConnector`:
+
+[source,java]
+----
+// TN3270
+Tn3270TtyConnector tn3270 = new Tn3270TtyConnector(host, port, "IBM-3279-2-E");
+tn3270.connect();
+widget.setEmulationType(EmulationType.TN3270);
+widget.setTtyConnector(tn3270);
+
+// TN5250
+Tn5250TtyConnector tn5250 = new Tn5250TtyConnector(host, port);
+tn5250.connect();
+widget.setEmulationType(EmulationType.TN5250);
+widget.setTtyConnector(tn5250);
+----
+
+See link:integration-guide.adoc#_terminal_emulations[Integration Guide § Terminal Emulations] for full details.
 
 == Compatibility Rules
 

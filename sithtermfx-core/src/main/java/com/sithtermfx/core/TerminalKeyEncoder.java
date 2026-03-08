@@ -101,8 +101,12 @@ public class TerminalKeyEncoder {
         putCode(VK_END, ESC, '[', 'F');
     }
 
-    void putCode(final int code, final int... bytesAsInt) {
+    public void putCode(final int code, final int... bytesAsInt) {
         myKeyCodes.put(new KeyCodeAndModifier(code, 0), CharUtils.makeCode(bytesAsInt));
+    }
+
+    public void putModifiedCode(final int code, final int modifier, final int... bytesAsInt) {
+        myKeyCodes.put(new KeyCodeAndModifier(code, modifier), CharUtils.makeCode(bytesAsInt));
     }
 
     private void putCode(@NotNull KeyCodeAndModifier key, final int... bytesAsInt) {

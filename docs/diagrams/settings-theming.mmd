@@ -1,0 +1,50 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#2d3436",
+    "primaryTextColor": "#dfe6e9",
+    "primaryBorderColor": "#636e72",
+    "lineColor": "#b2bec3",
+    "fontFamily": "Menlo, Consolas, monospace",
+    "fontSize": "13px"
+  },
+  "flowchart": {
+    "nodeSpacing": 20,
+    "rankSpacing": 40,
+    "curve": "basis",
+    "padding": 12
+  }
+}}%%
+
+graph TD
+    classDef ifaceNode fill:#d63031,stroke:#ff7675,color:#dfe6e9,stroke-width:2px
+    classDef defaultNode fill:#0984e3,stroke:#74b9ff,color:#dfe6e9,stroke-width:2px
+    classDef dynNode fill:#6c5ce7,stroke:#a29bfe,color:#dfe6e9,stroke-width:2px
+    classDef appNode fill:#00b894,stroke:#55efc4,color:#2d3436,stroke-width:2px
+    classDef flowNode fill:#636e72,stroke:#b2bec3,color:#dfe6e9,stroke-width:2px
+
+    subgraph HIER["Settings Hierarchy"]
+        direction TB
+        USP["<b>UserSettingsProvider</b><br/>getTerminalFont() · getHyperlinkColor()<br/>getDefaultForeground() · getMinFontSize()<br/>getDefaultBackground() · getMaxFontSize()"]:::ifaceNode
+        DSP["<b>DefaultSettingsProvider</b><br/>sensible defaults: Menlo/Consolas 14pt"]:::defaultNode
+        DFS["<b>DynamicFontSizeSettingsProvider</b><br/>increaseFontSize() · decreaseFontSize()<br/>resetFontSize() · addFontSizeListener()"]:::dynNode
+        YOUR["<b>Your App Settings Provider</b><br/>custom font family, dark theme colors,<br/>per-connection overrides"]:::appNode
+
+        USP -->|implements| DSP
+        DSP -->|extends| DFS
+        DFS -->|extends| YOUR
+    end
+
+    subgraph FLOW["Runtime Color Change"]
+        direction TB
+        F1["SithTerminal.getStyleState()"]:::flowNode
+        F2["new TextStyle<br/>(fgColor, bgColor)"]:::flowNode
+        F3["styleState.setDefaultStyle<br/>(style)"]:::flowNode
+        F4["styleState.reset()"]:::flowNode
+        F5["terminalPanel.repaint()"]:::flowNode
+
+        F1 --> F2 --> F3 --> F4 --> F5
+    end
+
+    style HIER fill:none,stroke:#a29bfe,stroke-width:1px,stroke-dasharray:3 3
+    style FLOW fill:none,stroke:#b2bec3,stroke-width:1px,stroke-dasharray:3 3

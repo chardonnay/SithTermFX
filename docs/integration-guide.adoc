@@ -20,6 +20,9 @@ The following diagram shows the high-level architecture and how the main compone
 
 image::images/architecture-overview.png[Architecture Overview,800]
 
+TIP: Diagram source: `docs/diagrams/architecture-overview.mmd`.
+To regenerate: `./docs/generate-diagrams.sh architecture-overview`
+
 '''
 
 == 1. Dependencies
@@ -369,6 +372,9 @@ The following diagram shows the settings/theming hierarchy and the runtime color
 
 image::images/settings-theming.png[Settings and Theming,800]
 
+TIP: Diagram source: `docs/diagrams/settings-theming.mmd`.
+To regenerate: `./docs/generate-diagrams.sh settings-theming`
+
 === Dark Theme
 
 Override `getDefaultForeground()` and `getDefaultBackground()` in a custom settings provider:
@@ -506,6 +512,9 @@ independent sessions, context menus, broadcast mode, and drag-and-drop reorderin
 The following diagram illustrates the internal split-cell tree and the resulting visual layout:
 
 image::images/split-terminal-structure.png[Split Terminal Structure,800]
+
+TIP: Diagram source: `docs/diagrams/split-terminal-structure.mmd`.
+To regenerate: `./docs/generate-diagrams.sh split-terminal-structure`
 
 === Basic Setup
 
@@ -686,6 +695,9 @@ public HyperlinkStyle.HighlightMode getHyperlinkHighlightingMode() {
 The following diagram shows the complete startup, running, and shutdown flow:
 
 image::images/lifecycle-diagram.png[Terminal Lifecycle,800]
+
+TIP: Diagram source: `docs/diagrams/lifecycle-diagram.mmd`.
+To regenerate: `./docs/generate-diagrams.sh lifecycle-diagram`
 
 === Startup Sequence
 
@@ -870,6 +882,238 @@ public class SshTtyConnector implements TtyConnector {
     }
 }
 ----
+
+'''
+
+== 11. Terminal Emulations
+
+SithTermFX ships with 21 terminal emulation types managed through the `EmulationType` enum.
+Each type carries metadata about its TERM name, default dimensions, screen mode (stream vs. block),
+and color support. The `EmulatorFactory` instantiates the correct emulator automatically.
+
+=== Selecting an Emulation Type
+
+Call `setEmulationType()` on the widget *before* `start()`:
+
+[source,java]
+----
+import com.sithtermfx.core.emulator.EmulationType;
+
+SithTermFxWidget widget = new SithTermFxWidget(
+        EmulationType.VT220.getDefaultColumns(),
+        EmulationType.VT220.getDefaultRows(),
+        new DefaultSettingsProvider());
+widget.setEmulationType(EmulationType.VT220);
+widget.setTtyConnector(createLocalShell());
+widget.start();
+----
+
+When connecting via PTY, set the `TERM` environment variable to match the emulation:
+
+[source,java]
+----
+Map<String, String> env = new HashMap<>(System.getenv());
+EmulationType emu = EmulationType.VT320;
+env.put("TERM", emu.getTermName());   // "vt320"
+
+PtyProcess process = new PtyProcessBuilder()
+        .setCommand(command)
+        .setEnvironment(env)
+        .setInitialColumns(emu.getDefaultColumns())
+        .setInitialRows(emu.getDefaultRows())
+        .start();
+----
+
+=== Stream-Mode Emulations (VT, Wyse, TVI, HP, etc.)
+
+Stream-mode terminals process character-by-character data using escape sequences.
+All stream-mode emulations work with any standard `TtyConnector` (PTY, SSH, serial).
+
+[source,java]
+----
+// DEC VT family (VT100, VT102, VT220, VT320, VT420, VT520)
+widget.setEmulationType(EmulationType.VT100);
+
+// Wyse terminals
+widget.setEmulationType(EmulationType.WY50);
+widget.setEmulationType(EmulationType.WY60);
+widget.setEmulationType(EmulationType.WY160);
+
+// TeleVideo terminals
+widget.setEmulationType(EmulationType.TVI910);
+widget.setEmulationType(EmulationType.TVI920);
+widget.setEmulationType(EmulationType.TVI925);
+
+// HP terminals
+widget.setEmulationType(EmulationType.HP2392);
+widget.setEmulationType(EmulationType.HP700_92);
+
+// ANSI derivatives
+widget.setEmulationType(EmulationType.SCOANSI);
+widget.setEmulationType(EmulationType.SUN_CDE);
+widget.setEmulationType(EmulationType.CTERM);
+
+// Commodore PETSCII (40 columns, 16 colors)
+widget.setEmulationType(EmulationType.PETSCII);
+----
+
+=== Block-Mode Emulations (TN3270 / TN5250)
+
+Block-mode terminals use a field-oriented, forms-based paradigm with dedicated
+Telnet protocol extensions and EBCDIC encoding. They require their own
+`TtyConnector` implementations.
+
+==== TN3270 — IBM Mainframe (RFC 2355)
+
+Use `Tn3270TtyConnector` for TN3270E connections to an IBM mainframe or z/OS host:
+
+[source,java]
+----
+import com.sithtermfx.core.emulator.EmulationType;
+import com.sithtermfx.core.emulator.tn3270.Tn3270TtyConnector;
+
+// 1. Create the TN3270 connector
+Tn3270TtyConnector connector = new Tn3270TtyConnector(
+        "mainframe.example.com",   // host
+        23,                         // port (standard TN3270 port)
+        "IBM-3279-2-E"             // terminal type
+);
+
+// Optional: set a specific LU name
+connector.setLuName("LU00A1");
+
+// 2. Connect (performs TN3270E negotiation)
+connector.connect();
+
+// 3. Wire up the widget
+SithTermFxWidget widget = new SithTermFxWidget(80, 24,
+        new DefaultSettingsProvider());
+widget.setEmulationType(EmulationType.TN3270);
+widget.setTtyConnector(connector);
+widget.start();
+----
+
+The `Tn3270TtyConnector` handles:
+
+* Full TN3270E (RFC 2355) option negotiation (BINARY, EOR, TN3270E)
+* Device-type and LU-name negotiation
+* EBCDIC ↔ Unicode conversion via `EbcdicCodec`
+* 3270 data stream framing with IAC EOR delimiters
+* Fallback to plain TN3270 (RFC 1576) if TN3270E is rejected
+
+The `Tn3270Emulator` processes:
+
+* 3270 commands: Write, Erase/Write, Erase/Write Alternate, Read Buffer, Read Modified
+* Field attributes: protected, numeric, MDT, display intensity
+* AID keys: Enter, PF1–PF24, PA1–PA3, Clear
+* Screen buffer management with 24×80 addressable positions
+
+==== TN5250 — IBM AS/400 / iSeries (RFC 4777)
+
+Use `Tn5250TtyConnector` for TN5250E connections to an IBM iSeries (AS/400) host:
+
+[source,java]
+----
+import com.sithtermfx.core.emulator.EmulationType;
+import com.sithtermfx.core.emulator.tn5250.Tn5250TtyConnector;
+
+// 1. Create the TN5250 connector
+Tn5250TtyConnector connector = new Tn5250TtyConnector(
+        "as400.example.com",       // host
+        23                          // port (standard TN5250 port)
+);
+
+// Optional: configure device name and code page
+connector.setDeviceName("DSP01");
+connector.setCodePage("037");
+
+// 2. Connect (performs TN5250E negotiation)
+connector.connect();
+
+// 3. Wire up the widget
+SithTermFxWidget widget = new SithTermFxWidget(80, 24,
+        new DefaultSettingsProvider());
+widget.setEmulationType(EmulationType.TN5250);
+widget.setTtyConnector(connector);
+widget.start();
+----
+
+The `Tn5250TtyConnector` handles:
+
+* TN5250E (RFC 4777) option negotiation (BINARY, EOR, TERMINAL-TYPE, NEW-ENVIRON)
+* NEW-ENVIRON exchange for IBM-specific variables (IBMRSEED, KBDTYPE, CODEPAGE, DEVNAME)
+* 5250 record framing with GDS headers and IAC EOR delimiters
+* EBCDIC ↔ Unicode conversion
+
+The `Tn5250Emulator` processes:
+
+* 5250 commands: Write to Display, Clear Unit, Clear Format Table, Read Input Fields, Read Screen
+* Field attributes: bypass, MDT, entry type (alpha, numeric, signed-numeric)
+* AID keys: Enter, F1–F24, Help, Print, Record Backspace, Page Up/Down
+* 5250-specific screen buffer with input field tracking
+
+=== Querying Emulation Metadata
+
+Use the `EmulationType` enum to inspect emulation properties:
+
+[source,java]
+----
+EmulationType emu = EmulationType.TN3270;
+
+String termName = emu.getTermName();             // "IBM-3279-2-E"
+String displayName = emu.getDisplayName();       // "IBM TN3270"
+int columns = emu.getDefaultColumns();           // 80
+int rows = emu.getDefaultRows();                 // 24
+boolean isBlock = emu.isBlockMode();             // true
+boolean isVt = emu.isVtFamily();                 // false
+
+EmulationType.ScreenMode mode = emu.getScreenMode();       // BLOCK
+EmulationType.ColorSupport color = emu.getColorSupport();  // COLOR_16
+----
+
+=== Building an Emulation Selector
+
+Iterate all emulation types to populate a UI combo box or menu:
+
+[source,java]
+----
+import javafx.scene.control.ComboBox;
+import javafx.util.StringConverter;
+
+ComboBox<EmulationType> emulationBox = new ComboBox<>();
+emulationBox.getItems().addAll(EmulationType.values());
+emulationBox.setValue(EmulationType.XTERM);
+
+emulationBox.setConverter(new StringConverter<>() {
+    @Override
+    public String toString(EmulationType type) {
+        return type == null ? "" : type.getDisplayName();
+    }
+
+    @Override
+    public EmulationType fromString(String string) {
+        for (EmulationType t : EmulationType.values()) {
+            if (t.getDisplayName().equals(string)) return t;
+        }
+        return EmulationType.XTERM;
+    }
+});
+
+emulationBox.setOnAction(e -> {
+    EmulationType selected = emulationBox.getValue();
+    widget.setEmulationType(selected);
+});
+----
+
+=== Emulation Architecture Overview
+
+The following diagram shows the emulation class hierarchy and how `EmulatorFactory`
+selects the correct emulator based on `EmulationType`:
+
+image::images/emulation-architecture.png[Emulation Architecture,800]
+
+TIP: Diagram source: `docs/diagrams/emulation-architecture.mmd`.
+To regenerate: `./docs/generate-diagrams.sh emulation-architecture`
 
 '''
 

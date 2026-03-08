@@ -34,6 +34,19 @@ public final class KeyEvent {
 
     public static final int VK_F12 = 0x7B;
 
+    public static final int VK_F13 = 0xF000;
+    public static final int VK_F14 = 0xF001;
+    public static final int VK_F15 = 0xF002;
+    public static final int VK_F16 = 0xF003;
+    public static final int VK_F17 = 0xF004;
+    public static final int VK_F18 = 0xF005;
+    public static final int VK_F19 = 0xF006;
+    public static final int VK_F20 = 0xF007;
+    public static final int VK_F21 = 0xF008;
+    public static final int VK_F22 = 0xF009;
+    public static final int VK_F23 = 0xF00A;
+    public static final int VK_F24 = 0xF00B;
+
     public static final int VK_INSERT = 0x9B;
 
     public static final int VK_DELETE = 0x7F;

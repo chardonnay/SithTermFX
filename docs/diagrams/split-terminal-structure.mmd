@@ -1,0 +1,58 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#2d3436",
+    "primaryTextColor": "#dfe6e9",
+    "primaryBorderColor": "#636e72",
+    "lineColor": "#b2bec3",
+    "fontFamily": "Menlo, Consolas, monospace",
+    "fontSize": "13px"
+  },
+  "flowchart": {
+    "nodeSpacing": 20,
+    "rankSpacing": 40,
+    "curve": "basis",
+    "padding": 12
+  }
+}}%%
+
+graph TD
+    classDef paneNode fill:#6c5ce7,stroke:#a29bfe,color:#dfe6e9,stroke-width:2px
+    classDef cellNode fill:#0984e3,stroke:#74b9ff,color:#dfe6e9,stroke-width:2px
+    classDef widgetNode fill:#d63031,stroke:#ff7675,color:#dfe6e9,stroke-width:2px
+    classDef connNode fill:#e17055,stroke:#fab1a0,color:#2d3436,stroke-width:2px
+    classDef featureNode fill:#636e72,stroke:#b2bec3,color:#dfe6e9,stroke-width:1px
+
+    subgraph TSP["TerminalSplitPane"]
+        direction TB
+        SCV["<b>SplitCell</b><br/>Vertical"]:::cellNode
+
+        SCH["<b>SplitCell</b><br/>Horizontal"]:::cellNode
+        WC["<b>SithTermFxWidget C</b>"]:::widgetNode
+        TCC["TtyConnector"]:::connNode
+
+        WA["<b>SithTermFxWidget A</b>"]:::widgetNode
+        TCA["TtyConnector"]:::connNode
+        WB["<b>SithTermFxWidget B</b>"]:::widgetNode
+        TCB["TtyConnector"]:::connNode
+
+        SCV --> SCH
+        SCV --> WC
+        WC --- TCC
+        SCH --> WA
+        SCH --> WB
+        WA --- TCA
+        WB --- TCB
+    end
+
+    subgraph FEATURES["Features"]
+        direction TB
+        F1["<b>Broadcast Mode</b><br/>Input → All Widgets"]:::featureNode
+        F2["<b>Drag & Drop</b><br/>Shift+Alt to reorder"]:::featureNode
+        F3["<b>Context Menu</b><br/>Split Right · Split Down<br/>Close Split"]:::featureNode
+    end
+
+    TSP ~~~ FEATURES
+
+    style TSP fill:none,stroke:#a29bfe,stroke-width:2px
+    style FEATURES fill:none,stroke:#b2bec3,stroke-width:1px,stroke-dasharray:3 3

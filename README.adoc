@@ -14,8 +14,9 @@ toc::[]
 == Features
 
 * Local terminal for Unix, Mac and Windows using Pty4J
-* Xterm emulation — passes most of tests from vttest
-* Xterm 256 colours
+* *21 terminal emulations* — XTerm, DEC VT100–VT520, IBM TN3270/TN5250, Wyse 50/60/160, TVI 910/920/925, HP 2392/700-92, SCO ANSI, Sun CDE, DEC CTERM, Commodore PETSCII
+* Xterm 256 colours and true-color support
+* Full TN3270E (RFC 2355) and TN5250E (RFC 4777) protocol with EBCDIC, block-mode fields, structured fields, and AID keys
 * Scrolling
 * Copy/Paste
 * Mouse support
@@ -93,6 +94,53 @@ Implement `SplitConnectorFactory` to provide new `TtyConnector` instances.
 The `SplitRequest` contains the chosen mode (SAME_SERVER_NEW_SHELL vs NEW_CONNECTION) and the parent widget for reusing connections.
 
 See link:sithtermfx-app/src/main/java/com/sithtermfx/app/example/SplitTerminalShellExample.java[SplitTerminalShellExample] for a demo.
+
+=== Terminal Emulations
+
+SithTermFX supports 21 terminal emulation types out of the box.
+Select an emulation by calling `setEmulationType()` on the widget *before* calling `start()`:
+
+[source,java]
+----
+import com.sithtermfx.core.emulator.EmulationType;
+
+widget.setEmulationType(EmulationType.VT220);
+widget.setTtyConnector(connector);
+widget.start();
+----
+
+The following table lists all available emulations:
+
+[cols="2,2,1,1,1",options="header"]
+|===
+| EmulationType   | Display Name          | Default Size | Screen Mode | Color
+
+| `XTERM`         | XTerm (256 color)     | 80×24        | Stream      | True Color
+| `VT100`         | DEC VT100             | 80×24        | Stream      | Mono
+| `VT102`         | DEC VT102             | 80×24        | Stream      | Mono
+| `VT220`         | DEC VT220             | 80×24        | Stream      | Mono
+| `VT320`         | DEC VT320             | 80×24        | Stream      | Mono
+| `VT420`         | DEC VT420             | 80×24        | Stream      | Mono
+| `VT520`         | DEC VT520             | 80×24        | Stream      | Mono
+| `TN3270`        | IBM TN3270            | 80×24        | Block       | 16 Color
+| `TN5250`        | IBM TN5250            | 80×24        | Block       | 16 Color
+| `SUN_CDE`       | Sun CDE (dtterm)      | 80×24        | Stream      | 16 Color
+| `WY50`          | Wyse 50               | 80×24        | Stream      | Mono
+| `WY60`          | Wyse 60               | 80×24        | Stream      | Mono
+| `WY160`         | Wyse 160              | 80×24        | Stream      | 16 Color
+| `TVI910`        | TeleVideo 910         | 80×24        | Stream      | Mono
+| `TVI920`        | TeleVideo 920         | 80×24        | Stream      | Mono
+| `TVI925`        | TeleVideo 925         | 80×24        | Stream      | Mono
+| `HP2392`        | HP 2392               | 80×24        | Stream      | Mono
+| `HP700_92`      | HP 700/92             | 80×24        | Stream      | 16 Color
+| `SCOANSI`       | SCO ANSI              | 80×25        | Stream      | 16 Color
+| `CTERM`         | DEC CTERM             | 80×24        | Stream      | Mono
+| `PETSCII`       | Commodore PETSCII     | 40×25        | Stream      | 16 Color
+|===
+
+For block-mode terminals (TN3270, TN5250) you must also use their dedicated `TtyConnector` implementations.
+See the link:docs/integration-guide.adoc[Integration Guide] for detailed examples, including the
+link:docs/integration-guide.adoc#_emulation_architecture_overview[Emulation Architecture] diagram.
 
 === Hyperlinks
 

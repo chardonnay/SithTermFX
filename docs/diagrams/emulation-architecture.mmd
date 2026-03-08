@@ -1,0 +1,111 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#2d3436",
+    "primaryTextColor": "#dfe6e9",
+    "primaryBorderColor": "#636e72",
+    "lineColor": "#74b9ff",
+    "secondaryColor": "#0984e3",
+    "tertiaryColor": "#00cec9",
+    "fontFamily": "Menlo, Consolas, monospace",
+    "fontSize": "13px"
+  },
+  "flowchart": {
+    "nodeSpacing": 20,
+    "rankSpacing": 50,
+    "curve": "basis",
+    "padding": 12
+  }
+}}%%
+
+graph LR
+    classDef enumNode fill:#6c5ce7,stroke:#a29bfe,color:#dfe6e9,stroke-width:2px
+    classDef factoryNode fill:#0984e3,stroke:#74b9ff,color:#dfe6e9,stroke-width:2px
+    classDef baseNode fill:#00b894,stroke:#55efc4,color:#2d3436,stroke-width:2px
+    classDef vtNode fill:#fdcb6e,stroke:#ffeaa7,color:#2d3436,stroke-width:2px
+    classDef ansiNode fill:#e17055,stroke:#fab1a0,color:#2d3436,stroke-width:2px
+    classDef wyseNode fill:#00cec9,stroke:#81ecec,color:#2d3436,stroke-width:2px
+    classDef tviNode fill:#a29bfe,stroke:#6c5ce7,color:#dfe6e9,stroke-width:2px
+    classDef hpNode fill:#fd79a8,stroke:#e84393,color:#2d3436,stroke-width:2px
+    classDef blockNode fill:#d63031,stroke:#ff7675,color:#dfe6e9,stroke-width:2px
+    classDef petsciiNode fill:#e84393,stroke:#fd79a8,color:#dfe6e9,stroke-width:2px
+    classDef connNode fill:#c0392b,stroke:#e74c3c,color:#dfe6e9,stroke-width:1px,stroke-dasharray:5 5
+
+    ET["<b>EmulationType</b><br/>enum — 21 types"]:::enumNode
+    EF["<b>EmulatorFactory</b><br/>static factory"]:::factoryNode
+
+    ET -->|selects| EF
+
+    subgraph VT["VT / XTerm Family"]
+        direction LR
+        SE["<b>SithEmulator</b><br/>XTerm 256-color"]:::baseNode
+        VE["<b>VtEmulator</b><br/>VT100 – VT520"]:::vtNode
+        SCO["ScoAnsiEmulator<br/>SCO ANSI"]:::ansiNode
+        SUN["SunCdeEmulator<br/>Sun CDE"]:::ansiNode
+        CTM["CtermEmulator<br/>DEC CTERM"]:::ansiNode
+        SE --> VE
+        VE --> SCO
+        VE --> SUN
+        VE --> CTM
+    end
+
+    subgraph WY["Wyse Family"]
+        direction LR
+        AWE["<b>AbstractWyseEmulator</b>"]:::wyseNode
+        W50["Wy50Emulator"]:::wyseNode
+        W60["Wy60Emulator"]:::wyseNode
+        W160["Wy160Emulator"]:::wyseNode
+        AWE --> W50
+        AWE --> W60
+        AWE --> W160
+    end
+
+    subgraph TV["TeleVideo Family"]
+        direction LR
+        ATE["<b>AbstractTviEmulator</b>"]:::tviNode
+        T910["Tvi910Emulator"]:::tviNode
+        T920["Tvi920Emulator"]:::tviNode
+        T925["Tvi925Emulator"]:::tviNode
+        ATE --> T910
+        ATE --> T920
+        ATE --> T925
+    end
+
+    subgraph HP["HP Family"]
+        direction LR
+        AHE["<b>AbstractHpEmulator</b>"]:::hpNode
+        H2392["Hp2392Emulator"]:::hpNode
+        H700["Hp700_92Emulator"]:::hpNode
+        AHE --> H2392
+        AHE --> H700
+    end
+
+    subgraph PE["PETSCII"]
+        direction LR
+        PET["<b>PetsciiEmulator</b><br/>Commodore PETSCII"]:::petsciiNode
+    end
+
+    subgraph BM["Block-Mode Terminals"]
+        direction LR
+        T3270["<b>Tn3270Emulator</b><br/>IBM 3270"]:::blockNode
+        T3CON["Tn3270TtyConnector<br/>TN3270E / RFC 2355"]:::connNode
+        T5250["<b>Tn5250Emulator</b><br/>IBM 5250"]:::blockNode
+        T5CON["Tn5250TtyConnector<br/>TN5250E / RFC 4777"]:::connNode
+        T3270 -.-|requires| T3CON
+        T5250 -.-|requires| T5CON
+    end
+
+    EF --> SE
+    EF --> AWE
+    EF --> ATE
+    EF --> AHE
+    EF --> PET
+    EF --> T3270
+    EF --> T5250
+
+    style VT fill:none,stroke:#55efc4,stroke-width:1px,stroke-dasharray:3 3
+    style WY fill:none,stroke:#81ecec,stroke-width:1px,stroke-dasharray:3 3
+    style TV fill:none,stroke:#a29bfe,stroke-width:1px,stroke-dasharray:3 3
+    style HP fill:none,stroke:#e84393,stroke-width:1px,stroke-dasharray:3 3
+    style PE fill:none,stroke:#fd79a8,stroke-width:1px,stroke-dasharray:3 3
+    style BM fill:none,stroke:#ff7675,stroke-width:1px,stroke-dasharray:3 3

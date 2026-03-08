@@ -4,6 +4,8 @@ import com.sithtermfx.core.input.KeyEvent;
 import com.sithtermfx.core.typeahead.TerminalTypeAheadManager;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.emulator.Emulator;
+import com.sithtermfx.core.emulator.EmulatorFactory;
+import com.sithtermfx.core.emulator.EmulationType;
 import com.sithtermfx.core.emulator.SithEmulator;
 import com.sithtermfx.core.model.SithTerminal;
 import org.jetbrains.annotations.NotNull;
@@ -45,14 +47,30 @@ public class TerminalStarter implements TerminalOutputStream {
     public TerminalStarter(@NotNull SithTerminal terminal, @NotNull TtyConnector ttyConnector,
                            @NotNull TerminalDataStream dataStream, @NotNull TerminalTypeAheadManager typeAheadManager,
                            @NotNull TerminalExecutorServiceManager executorServiceManager) {
+        this(terminal, ttyConnector, dataStream, typeAheadManager, executorServiceManager, EmulationType.XTERM);
+    }
+
+    public TerminalStarter(@NotNull SithTerminal terminal, @NotNull TtyConnector ttyConnector,
+                           @NotNull TerminalDataStream dataStream, @NotNull TerminalTypeAheadManager typeAheadManager,
+                           @NotNull TerminalExecutorServiceManager executorServiceManager,
+                           @NotNull EmulationType emulationType) {
         myTtyConnector = ttyConnector;
         myTerminal = terminal;
         myTerminal.setTerminalOutput(this);
-        myEmulator = createEmulator(dataStream, terminal);
+        myEmulator = createEmulator(dataStream, terminal, emulationType);
         myTypeAheadManager = typeAheadManager;
         mySingleThreadScheduledExecutor = executorServiceManager.getSingleThreadScheduledExecutor();
     }
 
+    protected Emulator createEmulator(TerminalDataStream dataStream, Terminal terminal,
+                                      EmulationType emulationType) {
+        return EmulatorFactory.createEmulator(emulationType, dataStream, terminal);
+    }
+
+    /**
+     * @deprecated use {@link #createEmulator(TerminalDataStream, Terminal, EmulationType)} instead
+     */
+    @Deprecated
     protected SithEmulator createEmulator(TerminalDataStream dataStream, Terminal terminal) {
         return new SithEmulator(dataStream, terminal);
     }
