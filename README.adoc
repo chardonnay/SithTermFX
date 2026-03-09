@@ -37,6 +37,19 @@ toc::[]
 | JPMS Support    | Yes        | No             | Yes
 |===
 
+== Downloads
+
+Release artifacts (JARs and application tarball) are published on the link:https://github.com/chardonnay/SithTermFX/releases[GitHub Releases] page.
+*No authentication is required* — anyone can download them.
+
+* Latest release: link:https://github.com/chardonnay/SithTermFX/releases/latest[Releases → Latest]
+* Direct download URLs (replace `VERSION` with e.g. `1.1.0`):
+** Application JAR: `https://github.com/chardonnay/SithTermFX/releases/download/vVERSION/sithtermfx-app-VERSION.jar`
+** Core library: `sithtermfx-core-VERSION.jar`, UI library: `sithtermfx-ui-VERSION.jar`
+** Standalone app tarball: `sithtermfx-app-VERSION.tar`
+
+These assets are attached to each release by the CI workflow; they are not published to GitHub Packages, so no login or token is needed.
+
 == Usage
 
 It is recommended to start working with SithTermFX by studying and running the
@@ -45,8 +58,9 @@ This class contains the minimal code needed to launch a terminal in a JavaFX app
 
 === Dependencies
 
-Maven Central publication is prepared and will be used for releases.
-Until the first Central release is published, build from source as described below.
+To use SithTermFX as a library, add the dependencies below.
+Release artifacts are available from the link:https://github.com/chardonnay/SithTermFX/releases[GitHub Releases] page (see <<Downloads>>) — no login required.
+Until Maven Central publication is available, either download the JARs from Releases or build from source as described below.
 
 [source,xml]
 ----

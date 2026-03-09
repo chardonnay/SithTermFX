@@ -27,6 +27,10 @@ To regenerate: `./docs/generate-diagrams.sh architecture-overview`
 
 == 1. Dependencies
 
+Release JARs are published on the https://github.com/chardonnay/SithTermFX/releases[GitHub Releases] page.
+*No authentication is required* — download the `sithtermfx-core-*.jar` and `sithtermfx-ui-*.jar` files from the latest release.
+They are attached to each release by CI and are not published to GitHub Packages.
+
 === Maven
 
 [source,xml]
@@ -41,6 +45,14 @@ To regenerate: `./docs/generate-diagrams.sh architecture-overview`
     <artifactId>sithtermfx-ui</artifactId>
     <version>${sithtermfx.version}</version>
 </dependency>
+----
+
+To use the JARs from GitHub Releases without a Maven repository, download them and install to your local repo (once per version):
+
+[source,bash]
+----
+mvn install:install-file -Dfile=sithtermfx-core-1.1.0.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-core -Dversion=1.1.0 -Dpackaging=jar
+mvn install:install-file -Dfile=sithtermfx-ui-1.1.0.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-ui -Dversion=1.1.0 -Dpackaging=jar
 ----
 
 === Gradle (Kotlin DSL)
@@ -66,7 +78,7 @@ module my.app {
 
 === Building from Source
 
-Until the first Maven Central release, build from source:
+Alternatively, build from source:
 
 [source,bash]
 ----
