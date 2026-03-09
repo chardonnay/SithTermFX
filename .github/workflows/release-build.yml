@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag (for example v1.0.1)"
+        description: "Release tag (for example v1.1.0)"
         required: true
         type: string
       target_ref:
@@ -86,7 +86,7 @@ jobs:
           fi
 
           if [[ ! "${TAG_NAME}" =~ ^v[0-9].* ]]; then
-            echo "Release tags must start with v, for example v1.0.0" >&2
+            echo "Release tags must start with v, for example v1.1.0" >&2
             exit 1
           fi
 
