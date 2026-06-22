@@ -33,6 +33,17 @@ public class SystemCommandSequenceTest {
     }
 
     @Test
+    public void osc8Args() {
+        // OSC 8 ; params ; URI — params position empty, URI at index 2.
+        assertArgs("8;;file:///path" + BEL_CHAR, List.of("8", "", "file:///path"));
+        assertArgs("8;id=x;https://a" + BEL_CHAR, List.of("8", "id=x", "https://a"));
+        // A URI containing ';' is split into extra args; case 8 rejoins them from index 2.
+        assertArgs("8;;https://a;b" + BEL_CHAR, List.of("8", "", "https://a", "b"));
+        // The closing sequence: OSC 8 ; ; ST.
+        assertArgs("8;;" + BEL_CHAR, List.of("8", "", ""));
+    }
+
+    @Test
     public void formatUsingSameTerminator() {
         var seq1 = create("2;Test 1" + BEL_CHAR);
         assertEquals(ESC_CHAR + "]foo" + BEL_CHAR, seq1.format(List.of("foo")));

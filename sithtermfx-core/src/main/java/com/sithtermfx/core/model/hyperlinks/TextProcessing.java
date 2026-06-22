@@ -8,6 +8,7 @@ import com.sithtermfx.core.model.TerminalLine;
 import com.sithtermfx.core.model.TerminalTextBuffer;
 import com.sithtermfx.core.util.CharUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
@@ -31,6 +32,8 @@ public class TextProcessing {
     private final HyperlinkStyle.HighlightMode myHighlightMode;
 
     private TerminalTextBuffer myTerminalTextBuffer;
+
+    private LinkInfoProvider myLinkInfoProvider;
 
     public TextProcessing(@NotNull TextStyle hyperlinkColor, @NotNull HyperlinkStyle.HighlightMode highlightMode) {
         myHyperlinkColor = hyperlinkColor;
@@ -179,6 +182,25 @@ public class TextProcessing {
 
     public void addHyperlinkFilter(@NotNull HyperlinkFilter filter) {
         myHyperlinkFilter.add(filter);
+    }
+
+    /**
+     * Registers the provider used to resolve explicit OSC 8 hyperlink URIs into {@link LinkInfo}.
+     * Only one provider is used; a later call replaces the previous one.
+     */
+    public void setLinkInfoProvider(@NotNull LinkInfoProvider linkInfoProvider) {
+        myLinkInfoProvider = linkInfoProvider;
+    }
+
+    /**
+     * Builds a {@link LinkInfo} for an explicit OSC 8 URI via the registered
+     * {@link LinkInfoProvider}.
+     *
+     * @return {@code null} if no provider is registered or the provider rejects the URI.
+     */
+    @Nullable
+    public LinkInfo createExplicitLink(@NotNull String uri) {
+        return myLinkInfoProvider != null ? myLinkInfoProvider.createLinkInfo(uri) : null;
     }
 
     public @NotNull List<LinkResultItem> applyFilter(@NotNull String line) {

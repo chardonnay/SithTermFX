@@ -37,6 +37,7 @@ The following packages are considered public and stable within a major version:
 * *TN5250 connections* via `com.sithtermfx.core.emulator.tn5250.Tn5250TtyConnector`
 * User configuration via `com.sithtermfx.ui.settings.UserSettingsProvider`
 * Split integration via `com.sithtermfx.ui.split.TerminalSplitPane`
+* *OSC 8 hyperlink resolution* via `com.sithtermfx.core.model.hyperlinks.LinkInfoProvider` (register with `SithTermFxWidget.setLinkInfoProvider`)
 
 == Emulation Types
 

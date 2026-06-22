@@ -16,6 +16,7 @@ import com.sithtermfx.core.model.SithTerminal;
 import com.sithtermfx.core.model.StyleState;
 import com.sithtermfx.core.model.TerminalTextBuffer;
 import com.sithtermfx.core.model.hyperlinks.HyperlinkFilter;
+import com.sithtermfx.core.model.hyperlinks.LinkInfoProvider;
 import com.sithtermfx.core.model.hyperlinks.TextProcessing;
 import com.sithtermfx.core.typeahead.TerminalTypeAheadManager;
 import com.sithtermfx.core.typeahead.TypeAheadTerminalModel;
@@ -109,6 +110,8 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
         TerminalTextBuffer terminalTextBuffer = new TerminalTextBuffer(columns, lines, styleState,
                 settingsProvider.getBufferMaxLinesCount(), myTextProcessing);
         myTextProcessing.setTerminalTextBuffer(terminalTextBuffer);
+        // OSC 8 hyperlinks work out of the box; embedders may override via setLinkInfoProvider.
+        myTextProcessing.setLinkInfoProvider(new DefaultOsc8LinkInfoProvider());
         myTerminalPanel = createTerminalPanel(mySettingsProvider, styleState, terminalTextBuffer);
         myTerminal = createTerminal(myTerminalPanel, terminalTextBuffer, styleState);
         myTypeAheadTerminalModel = new DefaultTypeAheadTerminalModel(myTerminal, terminalTextBuffer, settingsProvider);
@@ -560,6 +563,14 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
 
     public void addHyperlinkFilter(HyperlinkFilter filter) {
         myTextProcessing.addHyperlinkFilter(filter);
+    }
+
+    /**
+     * Overrides the provider that resolves explicit OSC 8 hyperlink URIs into clickable links.
+     * A {@link DefaultOsc8LinkInfoProvider} is registered by default.
+     */
+    public void setLinkInfoProvider(LinkInfoProvider linkInfoProvider) {
+        myTextProcessing.setLinkInfoProvider(linkInfoProvider);
     }
 
     @Override

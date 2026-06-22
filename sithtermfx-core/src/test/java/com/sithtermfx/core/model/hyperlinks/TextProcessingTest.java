@@ -32,6 +32,9 @@ public class TextProcessingTest {
         myHyperlinkStyle = new HyperlinkStyle(hyperlinkTextStyle, new LinkInfo(() -> {
         }));
         mySession.getTextProcessing().addHyperlinkFilter(new TestFilter());
+        // OSC 8 links resolve through the LinkInfoProvider (decoupled from the autolink filters).
+        mySession.getTextProcessing().setLinkInfoProvider(uri -> new LinkInfo(() -> {
+        }));
     }
 
     private @NotNull SithTerminal getTerminal() {
