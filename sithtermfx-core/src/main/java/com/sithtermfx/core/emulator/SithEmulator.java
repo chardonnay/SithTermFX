@@ -235,8 +235,11 @@ public class SithEmulator extends DataStreamIteratingEmulator {
                 // "return true" to avoid logging errors about unhandled sequences;
                 return true;
             case 8: // Hyperlink https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
-                String uri = args.getStringAt(2);
-                if (uri != null) {
+                // Format: OSC 8 ; params ; URI ST. The URI is everything after the second ';';
+                // rejoin in case the URI itself contains ';' (args are split on every ';').
+                List<String> oscArgs = args.getArgs();
+                if (oscArgs.size() >= 3) {
+                    String uri = String.join(";", oscArgs.subList(2, oscArgs.size()));
                     if (!uri.isEmpty()) {
                         myTerminal.setLinkUriStarted(uri);
                     } else {

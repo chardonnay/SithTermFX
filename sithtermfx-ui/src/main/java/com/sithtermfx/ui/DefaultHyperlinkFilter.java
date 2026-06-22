@@ -15,28 +15,21 @@
  */
 package com.sithtermfx.ui;
 
-import java.awt.Desktop;
-import java.awt.EventQueue;
 import com.sithtermfx.core.model.hyperlinks.HyperlinkFilter;
 import com.sithtermfx.core.model.hyperlinks.LinkInfo;
 import com.sithtermfx.core.model.hyperlinks.LinkResult;
 import com.sithtermfx.core.model.hyperlinks.LinkResultItem;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * @author Daniel Mengel
  */
 public class DefaultHyperlinkFilter implements HyperlinkFilter {
-
-    private static final Logger logger = LoggerFactory.getLogger(DefaultHyperlinkFilter.class);
 
     private static final Pattern URL_PATTERN = Pattern.compile("\\b(mailto:|(news|(ht|f)tp(s?))://|((?<![\\p{L}0-9_.])"
             + "(www\\.)))[-A-Za-z0-9+$&@#/%?=~_|!:,.;]*[-A-Za-z0-9+$&@#/%=~_|]");
@@ -64,25 +57,9 @@ public class DefaultHyperlinkFilter implements HyperlinkFilter {
                 }
             }
             String url = m.group();
-            URI safeUri = SafeUriOpen.validateForBrowse(url);
-            if (safeUri == null) continue;
-            URI uriToOpen = safeUri;
-            item = new LinkResultItem(textStartOffset + m.start(), textStartOffset + m.end(), new LinkInfo(() -> {
-                try {
-                    var d = Desktop.getDesktop();
-                    if (d != null) {
-                        EventQueue.invokeLater(() -> {
-                            try {
-                                d.browse(uriToOpen);
-                            } catch (Exception ex) {
-                                logger.error("Error opening url: {}", url, ex);
-                            }
-                        });
-                    }
-                } catch (Exception e) {
-                    //pass
-                }
-            }));
+            LinkInfo linkInfo = DesktopLinkInfoFactory.forUri(url);
+            if (linkInfo == null) continue;
+            item = new LinkResultItem(textStartOffset + m.start(), textStartOffset + m.end(), linkInfo);
             if (items != null) {
                 items.add(item);
             }

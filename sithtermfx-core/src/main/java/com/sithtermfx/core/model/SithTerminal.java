@@ -26,7 +26,7 @@ import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.emulator.charset.CharacterSet;
 import com.sithtermfx.core.emulator.charset.GraphicSet;
 import com.sithtermfx.core.emulator.charset.GraphicSetState;
-import com.sithtermfx.core.model.hyperlinks.LinkResultItem;
+import com.sithtermfx.core.model.hyperlinks.LinkInfo;
 import com.sithtermfx.core.model.hyperlinks.TextProcessing;
 import com.sithtermfx.core.util.CharUtils;
 import org.jetbrains.annotations.Nls;
@@ -1027,14 +1027,18 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
 
     @Override
     public void setLinkUriStarted(@NotNull String uri) {
-        TextStyle style = myStyleState.getCurrent();
+        if (uri.isBlank()) {
+            return;
+        }
         TextProcessing textProcessing = myTerminalTextBuffer.getTextProcessing();
-        if (textProcessing != null) {
-            List<LinkResultItem> linkResultItems = textProcessing.applyFilter(uri);
-            linkResultItems.stream()
-                    .filter(item -> item.getStartOffset() == 0 && item.getEndOffset() == uri.length())
-                    .findFirst().ifPresent(linkItem ->
-                            myStyleState.setCurrent(new HyperlinkStyle(style, linkItem.getLinkInfo())));
+        if (textProcessing == null) {
+            return;
+        }
+        // OSC 8 supplies the link target explicitly, so build the HyperlinkStyle directly from
+        // the URI via the registered provider instead of routing it through the autolink filters.
+        LinkInfo linkInfo = textProcessing.createExplicitLink(uri);
+        if (linkInfo != null) {
+            myStyleState.setCurrent(new HyperlinkStyle(myStyleState.getCurrent(), linkInfo));
         }
     }
 
