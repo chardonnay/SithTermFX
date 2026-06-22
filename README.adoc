@@ -20,6 +20,7 @@ toc::[]
 * Scrolling
 * Copy/Paste
 * Mouse support
+* *Clickable hyperlinks* — OSC 8 explicit hyperlinks (including local `file://` links from tools like `ls --hyperlink`) plus optional automatic URL detection
 * Terminal resizing from client or server side
 * Terminal tabs
 * *Dynamic font size* — Adjust font size at runtime via Ctrl+Plus/Minus (Cmd+Plus/Minus on Mac) without disconnecting
@@ -43,7 +44,7 @@ Release artifacts (JARs and application tarball) are published on the link:https
 *No authentication is required* — anyone can download them.
 
 * Latest release: link:https://github.com/chardonnay/SithTermFX/releases/latest[Releases → Latest]
-* Direct download URLs (replace `VERSION` with e.g. `1.1.0`):
+* Direct download URLs (replace `VERSION` with e.g. `1.2.0`):
 ** Application JAR: `https://github.com/chardonnay/SithTermFX/releases/download/vVERSION/sithtermfx-app-VERSION.jar`
 ** Core library: `sithtermfx-core-VERSION.jar`, UI library: `sithtermfx-ui-VERSION.jar`
 ** Standalone app tarball: `sithtermfx-app-VERSION.tar`
@@ -158,7 +159,15 @@ link:docs/integration-guide.adoc#_emulation_architecture_overview[Emulation Arch
 
 === Hyperlinks
 
-SithTermFX provides a wide range of features when working with links.
+SithTermFX makes links in terminal output clickable from two independent sources:
+
+* *Explicit OSC 8 hyperlinks* — programs mark arbitrary text as a link via the `OSC 8` escape
+  sequence (e.g. `ls --hyperlink`, `eza`, compiler diagnostics). This works out of the box.
+  Allowed schemes are `http`, `https`, `mailto`, `ftp`, `ftps`, `news`, and local `file://`
+  links; any other scheme is ignored for safety.
+* *Automatic URL detection* — register `DefaultHyperlinkFilter` to scan plain output and turn
+  bare `http(s)://`, `ftp`, `mailto`, and `www.` URLs into links.
+
 The `HighlightMode` enumeration specifies multiple modes of working with links and their colors.
 In the `ALWAYS` modes, links are always underlined and always clickable.
 In the `NEVER` modes, links are never underlined and never clickable.
@@ -167,6 +176,8 @@ Now let's clarify the difference between the two types of colors.
 `CUSTOM` colors are those set by the SithTermFX user in the `getHyperlinkColor()` method of the settings.
 `ORIGINAL` colors are those offered by the program running in the terminal.
 Thus, links can use either custom colors or the original text colors.
+
+See the link:docs/integration-guide.adoc#_hyperlinks[Integration Guide § Hyperlinks] for setup, OSC 8 customization, and security details.
 
 == Public API
 

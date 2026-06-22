@@ -51,8 +51,8 @@ To use the JARs from GitHub Releases without a Maven repository, download them a
 
 [source,bash]
 ----
-mvn install:install-file -Dfile=sithtermfx-core-1.1.0.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-core -Dversion=1.1.0 -Dpackaging=jar
-mvn install:install-file -Dfile=sithtermfx-ui-1.1.0.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-ui -Dversion=1.1.0 -Dpackaging=jar
+mvn install:install-file -Dfile=sithtermfx-core-1.2.0.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-core -Dversion=1.2.0 -Dpackaging=jar
+mvn install:install-file -Dfile=sithtermfx-ui-1.2.0.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-ui -Dversion=1.2.0 -Dpackaging=jar
 ----
 
 === Gradle (Kotlin DSL)
@@ -87,7 +87,7 @@ cd SithTermFX
 mvn clean install
 ----
 
-The built artifacts are then available from `mavenLocal()` using version `1.1.0`.
+The built artifacts are then available from `mavenLocal()` using version `1.2.0`.
 
 '''
 
@@ -666,8 +666,45 @@ splitPane.setExtraMenuItemsFactory(widget -> {
 
 == 8. Hyperlinks
 
-SithTermFX can detect and highlight clickable links in terminal output.
-`DefaultHyperlinkFilter` detects URLs automatically:
+SithTermFX makes links in terminal output clickable from two independent sources: explicit
+*OSC 8* hyperlinks emitted by the program, and optional *automatic URL detection* over plain
+text. Both render with the same styling and open through `java.awt.Desktop`.
+
+=== OSC 8 Explicit Hyperlinks
+
+Programs can mark arbitrary text as a hyperlink using the `OSC 8` escape sequence
+(`ESC ] 8 ; params ; URI ST text ESC ] 8 ; ; ST`). Tools such as `ls --hyperlink`, `eza`, and
+many compilers emit these. *OSC 8 support is enabled by default* on every `SithTermFxWidget` —
+no registration is required.
+
+For safety, only an allowlist of URI schemes is honored: `http`, `https`, `mailto`, `ftp`,
+`ftps`, `news`, and `file`. `file://` links are restricted to the local host (remote
+authorities are rejected) and opened via `Desktop.open`; the other listed schemes open via
+`Desktop.browse`. Any other scheme (e.g. `javascript:`, `data:`) is ignored and the text
+renders normally. Links open on a direct click.
+
+To customize how OSC 8 URIs are resolved — for example to add a confirmation prompt, restrict
+schemes further, or plug in a different open action — register your own `LinkInfoProvider`. It
+replaces the built-in `DefaultOsc8LinkInfoProvider`:
+
+[source,java]
+----
+import com.sithtermfx.core.model.hyperlinks.LinkInfo;
+import com.sithtermfx.core.model.hyperlinks.LinkInfoProvider;
+
+widget.setLinkInfoProvider(uri -> {
+    if (!uri.startsWith("https://")) {
+        return null;  // reject -> the text renders as a plain (non-clickable) string
+    }
+    return new LinkInfo(() -> openInBrowser(uri));
+});
+----
+
+=== Automatic URL Detection
+
+Optionally register `DefaultHyperlinkFilter` to scan plain terminal output and linkify bare
+URLs (`http(s)://`, `ftp`, `mailto`, `www.`). This is independent of OSC 8 and uses the
+browser-only scheme allowlist (no `file://`):
 
 [source,java]
 ----
@@ -676,12 +713,14 @@ import com.sithtermfx.ui.DefaultHyperlinkFilter;
 widget.addHyperlinkFilter(new DefaultHyperlinkFilter());
 ----
 
-Hyperlink appearance is controlled by `UserSettingsProvider`:
+=== Appearance
+
+Hyperlink appearance (for both sources) is controlled by `UserSettingsProvider`:
 
 [cols="1,2",options="header"]
 |===
 | Method                           | Purpose
-| `getHyperlinkColor()`            | Custom color for detected links
+| `getHyperlinkColor()`            | Custom color for links
 | `getHyperlinkHighlightingMode()` | `ALWAYS`, `HOVER`, or `NEVER`
 |===
 
