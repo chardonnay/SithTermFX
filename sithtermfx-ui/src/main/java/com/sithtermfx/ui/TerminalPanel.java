@@ -215,6 +215,14 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     private final AtomicBoolean needRepaint = new AtomicBoolean(true);
 
+    /**
+     * The window background colour used by the most recent {@link #doRepaint()}, cached so the
+     * per-cell and margin fills can skip repainting it. That matters when the background is
+     * translucent (korTTY's adjustable terminal transparency): {@code doRepaint} already paints
+     * the whole canvas once, and stacking further translucent fills on top would darken it.
+     */
+    private javafx.scene.paint.Color myWindowBackgroundFx;
+
     private int myMaxFPS = 50;
 
     private int myBlinkingPeriod = 500;
@@ -959,7 +967,13 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     private void doRepaint() {
         resetColorCache();
-        graphicsContext.setFill(getBackground());
+        javafx.scene.paint.Color windowBackground = getBackground();
+        myWindowBackgroundFx = windowBackground;
+        // Clear to fully transparent before painting the background. For an opaque background the
+        // following fillRect overwrites everything, so this is a no-op; for a translucent one
+        // (korTTY's terminal transparency) it prevents the previous frame from accumulating.
+        graphicsContext.clearRect(0, 0, this.canvas.getWidth(), this.canvas.getHeight());
+        graphicsContext.setFill(windowBackground);
         graphicsContext.fillRect(0, 0, this.canvas.getWidth(), this.canvas.getHeight());
         this.fixScrollBarThumbVisibility();
         try {
@@ -1509,8 +1523,17 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             }
         }
         javafx.scene.paint.Color backgroundColor = getEffectiveBackground(style);
-        graphicsContext.setFill(backgroundColor);
-        graphicsContext.fillRect(xCoord, yCoord, width, height);
+        // doRepaint already painted the whole canvas with the window background. When that
+        // background is translucent, repainting the same colour per cell would stack alpha and
+        // darken the terminal, so skip it. Opaque backgrounds keep the original behaviour.
+        javafx.scene.paint.Color windowBackground = myWindowBackgroundFx;
+        boolean redundantTranslucentDefault = windowBackground != null
+                && windowBackground.getOpacity() < 1.0
+                && backgroundColor.equals(windowBackground);
+        if (!redundantTranslucentDefault) {
+            graphicsContext.setFill(backgroundColor);
+            graphicsContext.fillRect(xCoord, yCoord, width, height);
+        }
         if (buf.isNul()) {
             return; // nothing more to do
         }
@@ -1700,7 +1723,13 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     private void drawMargins(double width, double height) {
         //TODO
-        graphicsContext.setFill(getBackground());
+        javafx.scene.paint.Color windowBackground = getBackground();
+        // doRepaint's full-canvas fill already covers the margins. Re-filling is harmless for an
+        // opaque background but would double the alpha of a translucent one, so skip it then.
+        if (windowBackground.getOpacity() < 1.0) {
+            return;
+        }
+        graphicsContext.setFill(windowBackground);
         graphicsContext.fillRect(0, height, this.canvas.getWidth(), this.canvas.getHeight() - height);
         graphicsContext.fillRect(width, 0, this.canvas.getWidth() - width, this.canvas.getHeight());
     }

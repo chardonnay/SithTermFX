@@ -54,6 +54,16 @@ public class TerminalColor {
         return new TerminalColor(r, g, b);
     }
 
+    /**
+     * Like {@link #rgb(int, int, int)} but carries an alpha channel (0 = fully transparent,
+     * 255 = fully opaque). Used by korTTY's adjustable terminal-background transparency: the
+     * resulting {@link Color} keeps its alpha through {@code FxTransformers.toFxColor}, so the
+     * window background can be painted translucent while glyphs stay opaque.
+     */
+    public static TerminalColor rgba(int r, int g, int b, int a) {
+        return new TerminalColor(-1, new Color(r, g, b, a), null);
+    }
+
     public boolean isIndexed() {
         return myColorIndex != -1;
     }
