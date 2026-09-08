@@ -136,7 +136,7 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
             myTerminalTextBuffer.getLine(myCursorY - 1).deleteCharacters(myTerminalWidth);
             if (isAutoWrap()) {
                 myTerminalTextBuffer.getLine(myCursorY - 1).setWrapped(true);
-                myCursorY += 1;
+                lineFeed();
             }
         }
     }
@@ -199,17 +199,37 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
         }
     }
 
+    /**
+     * Moves the cursor to the next line. On the bottom margin that scrolls the scrolling region.
+     * Below the margin the cursor is <em>outside</em> the region — a position only reachable while
+     * origin mode (DECOM) is off, which is exactly where tmux parks the cursor to paint its status
+     * line — so the region must not scroll: the cursor simply advances until the last line of the
+     * screen and stops there.
+     */
+    private void lineFeed() {
+        if (myCursorY == myScrollRegionBottom) {
+            scrollArea(myScrollRegionTop, scrollingRegionSize(), -1);
+        } else if (myCursorY < myTerminalHeight) {
+            myCursorY += 1;
+        }
+    }
+
+    /**
+     * Keeps the cursor on an addressable line before text is written to it. Only origin mode
+     * (DECOM) confines the cursor to the scrolling region; with DECOM reset — the default, and what
+     * tmux relies on — CUP may address any line on the screen, above the top margin or below the
+     * bottom one, and text written there must stay on that line. The margins bound the scrolling,
+     * not the addressing, so this clamps to the screen and never scrolls; the region scrolls in
+     * {@link #lineFeed()}, where a line feed or an autowrap actually crosses the bottom margin.
+     */
     public void scrollY() {
         myTerminalTextBuffer.lock();
         try {
-            if (myCursorY > myScrollRegionBottom) {
-                final int dy = myScrollRegionBottom - myCursorY;
-                myCursorY = myScrollRegionBottom;
-                scrollArea(myScrollRegionTop, scrollingRegionSize(), dy);
-                myDisplay.setCursor(myCursorX, myCursorY);
+            if (myCursorY < scrollingRegionTop()) {
+                myCursorY = scrollingRegionTop();
             }
-            if (myCursorY < myScrollRegionTop) {
-                myCursorY = myScrollRegionTop;
+            if (myCursorY > myTerminalHeight) {
+                myCursorY = myTerminalHeight;
             }
         } finally {
             myTerminalTextBuffer.unlock();
@@ -224,8 +244,7 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
     @Override
     public void newLine() {
         myCursorYChanged = true;
-        myCursorY += 1;
-        scrollY();
+        lineFeed();
         if (isAutoNewLine()) {
             carriageReturn();
         }
@@ -609,13 +628,9 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
         //bottom margin, the page scrolls up
         myTerminalTextBuffer.lock();
         try {
-            if (myCursorY == myScrollRegionBottom) {
-                scrollArea(myScrollRegionTop, scrollingRegionSize(), -1);
-            } else {
-                myCursorY += 1;
-                adjustXY(-1);
-                myDisplay.setCursor(myCursorX, myCursorY);
-            }
+            lineFeed();
+            adjustXY(-1);
+            myDisplay.setCursor(myCursorX, myCursorY);
         } finally {
             myTerminalTextBuffer.unlock();
         }
@@ -631,11 +646,7 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
         myTerminalTextBuffer.lock();
         try {
             myCursorX = 0;
-            if (myCursorY == myScrollRegionBottom) {
-                scrollArea(myScrollRegionTop, scrollingRegionSize(), -1);
-            } else {
-                myCursorY += 1;
-            }
+            lineFeed();
             myDisplay.setCursor(myCursorX, myCursorY);
         } finally {
             myTerminalTextBuffer.unlock();
