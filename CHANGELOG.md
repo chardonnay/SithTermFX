@@ -5,6 +5,30 @@ All notable changes to SithTermFX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-09-09
+
+### Fixed
+
+- The scrolling margins no longer confine the cursor while origin mode (DECOM) is off. `DECSTBM` sets the region that scrolls, not the region the cursor may be addressed in; only DECOM makes line addressing relative. `SithTerminal.scrollY()` enforced the margins on every write regardless, and enforced them by scrolling, so text addressed above the top margin was pulled down into the region and text addressed below the bottom margin scrolled the region out from under the content already on screen. Both positions are reachable from any full-screen application that keeps a status line outside its scrolling area — tmux hit both, drawing its first pane row one line too low and stranding the cursor on the blank line above it.
+
+### Changed
+
+- Line advancing is unified in a single `lineFeed()` used by `newLine()`, `index()`, `nextLine()` and the autowrap in `wrapLines()`: on the bottom margin it scrolls the region, below it the cursor is outside the region and simply advances to the last line of the screen. This removes three copies of the same margin check and stops `index()`/`nextLine()` from moving the cursor past the last line. `scrollY()` is now a plain clamp onto an addressable line and never scrolls.
+
+---
+
+## [1.2.1] - 2026-07-06
+
+### Added
+
+- `TerminalColor.rgba(r, g, b, a)`, so a background colour can carry an alpha channel.
+
+### Fixed
+
+- `TerminalPanel.doRepaint()` clears the canvas before filling the window background, and skips the redundant per-cell and margin fills when that background is translucent, so a see-through terminal background is painted once instead of accumulating alpha frame over frame. Opaque rendering is unchanged.
+
+---
+
 ## [1.2.0] - 2026-06-22
 
 ### Added
