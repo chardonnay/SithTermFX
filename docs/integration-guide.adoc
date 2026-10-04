@@ -714,6 +714,27 @@ import com.sithtermfx.ui.DefaultHyperlinkFilter;
 widget.addHyperlinkFilter(new DefaultHyperlinkFilter());
 ----
 
+=== Which Clicks Follow a Link
+
+By default every primary click on a link follows it, and hovering a link shows the hand cursor.
+To follow links only on a modifier click — e.g. Cmd+click on macOS and Ctrl+click on Windows and
+Linux, so that a plain click, double click or triple click on a link selects text as it does
+elsewhere — override `isFollowLinkGesture(ModifierKeys)` in your settings provider:
+
+[source,java]
+----
+import com.sithtermfx.ui.settings.ModifierKeys;
+
+@Override
+public boolean isFollowLinkGesture(@NotNull ModifierKeys modifiers) {
+    // the platform shortcut key, but not AltGr (which Windows reports as Ctrl+Alt)
+    return modifiers.isShortcutDown() && !modifiers.isAltDown();
+}
+----
+
+The same predicate decides when a hovered link shows the hand cursor and its hover highlight; the
+hover state follows the modifier keys as they are pressed and released over a link.
+
 === Appearance
 
 Hyperlink appearance (for both sources) is controlled by `UserSettingsProvider`:
@@ -723,7 +744,12 @@ Hyperlink appearance (for both sources) is controlled by `UserSettingsProvider`:
 | Method                           | Purpose
 | `getHyperlinkColor()`            | Custom color for links
 | `getHyperlinkHighlightingMode()` | `ALWAYS`, `HOVER`, or `NEVER`
+| `isFollowLinkGesture(ModifierKeys)` | Which clicks follow a link (default: every primary click)
 |===
+
+A link that is not highlighted is drawn in the colours and attributes of its own text — for an OSC 8
+link, the text style the program set, including SGR changes inside the link. Embedders that render
+the buffer themselves (recordings, screenshots) get that style from `HyperlinkStyle.getUnderlyingStyle()`.
 
 Override in your settings provider:
 

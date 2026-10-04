@@ -38,6 +38,7 @@ The following packages are considered public and stable within a major version:
 * User configuration via `com.sithtermfx.ui.settings.UserSettingsProvider`
 * Split integration via `com.sithtermfx.ui.split.TerminalSplitPane`
 * *OSC 8 hyperlink resolution* via `com.sithtermfx.core.model.hyperlinks.LinkInfoProvider` (register with `SithTermFxWidget.setLinkInfoProvider`)
+* *Link click policy* via `UserSettingsProvider.isFollowLinkGesture(com.sithtermfx.ui.settings.ModifierKeys)`
 
 == Emulation Types
 
