@@ -65,6 +65,23 @@ public class TerminalPanelFollowLinkTest {
     }
 
     @Test
+    public void onlyTheFirstClickOfAMultiClickFollowsALink() {
+        SettingsProvider settings = new DefaultSettingsProvider();
+
+        assertFalse(TerminalPanel.isFollowLinkClick(settings, click(MouseButton.PRIMARY, false, 2, true)));
+        assertFalse(TerminalPanel.isFollowLinkClick(settings, click(MouseButton.PRIMARY, false, 3, true)));
+        assertFalse(TerminalPanel.isFollowLinkClick(myShortcutOnly, click(MouseButton.PRIMARY, true, 2, true)));
+    }
+
+    @Test
+    public void theReleaseThatEndsADragDoesNotFollowALink() {
+        SettingsProvider settings = new DefaultSettingsProvider();
+
+        assertFalse(TerminalPanel.isFollowLinkClick(settings, click(MouseButton.PRIMARY, false, 1, false)));
+        assertFalse(TerminalPanel.isFollowLinkClick(myShortcutOnly, click(MouseButton.PRIMARY, true, 1, false)));
+    }
+
+    @Test
     public void modifierKeysAreReadFromMouseAndKeyEvents() {
         ModifierKeys fromMouse = ModifierKeys.of(click(MouseButton.PRIMARY, true));
         assertTrue(fromMouse.isShortcutDown());
@@ -77,9 +94,18 @@ public class TerminalPanelFollowLinkTest {
 
     /** A primary or secondary click, with the platform's shortcut key down or not. */
     private static MouseEvent click(MouseButton button, boolean shortcutDown) {
+        return click(button, shortcutDown, 1, true);
+    }
+
+    /**
+     * @param clickCount       the click's place in a multi-click
+     * @param stillSincePress  false for the release that ends a drag
+     */
+    private static MouseEvent click(MouseButton button, boolean shortcutDown, int clickCount,
+                                    boolean stillSincePress) {
         boolean mac = com.sithtermfx.core.util.Platform.isMacOS();
-        return new MouseEvent(MouseEvent.MOUSE_CLICKED, 1, 1, 1, 1, button, 1,
+        return new MouseEvent(MouseEvent.MOUSE_CLICKED, 1, 1, 1, 1, button, clickCount,
                 false, shortcutDown && !mac, false, shortcutDown && mac,
-                false, false, false, false, false, true, null);
+                false, false, false, false, false, stillSincePress, null);
     }
 }

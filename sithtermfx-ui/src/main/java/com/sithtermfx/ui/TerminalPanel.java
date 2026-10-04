@@ -560,9 +560,17 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         return myCursorType == Cursor.HAND && isFollowLinkClick(mySettingsProvider, e);
     }
 
-    /** Whether a click is one that follows the link under the pointer, as far as the button and modifiers go. */
+    /**
+     * Whether a click is one that follows the link under the pointer, as far as the button, the
+     * modifiers and the gesture go. Only the first click of a multi-click follows a link (a double
+     * click opened it twice), and so does no release that ends a drag (a selection dragged over a link
+     * opened it): the later clicks of a multi-click select a word or a line as on plain text.
+     */
     static boolean isFollowLinkClick(@NotNull SettingsProvider settingsProvider, @NotNull MouseEvent e) {
-        return e.getButton() == MouseButton.PRIMARY && settingsProvider.isFollowLinkGesture(ModifierKeys.of(e));
+        return e.getButton() == MouseButton.PRIMARY
+                && e.getClickCount() <= 1
+                && e.isStillSincePress()
+                && settingsProvider.isFollowLinkGesture(ModifierKeys.of(e));
     }
 
     /**
