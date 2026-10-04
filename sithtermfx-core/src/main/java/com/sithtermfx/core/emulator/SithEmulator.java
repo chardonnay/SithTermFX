@@ -138,7 +138,10 @@ public class SithEmulator extends DataStreamIteratingEmulator {
                 break;
             case 'P': // Device Control String (DCS)
                 SystemCommandSequence command = new SystemCommandSequence(myDataStream);
-                if (!deviceControlString(command)) {
+                if (command.isTruncated()) {
+                    // like an overlong OSC: only its start was kept, so it is dropped whole
+                    logger.debug("Dropped a DCS longer than {} chars", SystemCommandSequence.MAX_BODY_LENGTH);
+                } else if (!deviceControlString(command)) {
                     logger.warn("Error processing DCS: ESCP" + command);
                 }
                 break;
