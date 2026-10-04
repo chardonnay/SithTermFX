@@ -6,7 +6,10 @@ import static com.sithtermfx.core.util.Ascii.ESC_CHAR;
 import com.sithtermfx.core.ArrayTerminalDataStream;
 import java.util.ArrayList;
 import java.util.List;
-import static org.junit.jupiter.api.Assertions.assertEquals;;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
@@ -49,6 +52,56 @@ public class SystemCommandSequenceTest {
         assertEquals(ESC_CHAR + "]foo" + BEL_CHAR, seq1.format(List.of("foo")));
         var seq2 = create("2;Test 1" + TWO_BYTES_TERMINATOR);
         assertEquals(ESC_CHAR + "]bar;baz" + TWO_BYTES_TERMINATOR, seq2.format(List.of("bar", "baz")));
+    }
+
+    @Test
+    public void keepsOnlyTheStartOfAnOverlongSequence() throws IOException {
+        var stream = new ArrayTerminalDataStream(("2;" + "x".repeat(20) + BEL_CHAR + "after").toCharArray());
+        var command = new SystemCommandSequence(stream, 8);
+
+        assertTrue(command.isTruncated());
+        assertEquals(List.of("2", "xxxxxx"), command.getArgs());
+        // the whole sequence was read, up to its terminator, and nothing after it
+        assertEquals("after", remaining(stream));
+    }
+
+    @Test
+    public void findsTheTwoCharTerminatorBeyondTheLimit() throws IOException {
+        var stream = new ArrayTerminalDataStream(("2;" + "x".repeat(20) + TWO_BYTES_TERMINATOR + "after").toCharArray());
+        var command = new SystemCommandSequence(stream, 8);
+
+        assertTrue(command.isTruncated());
+        assertEquals(ESC_CHAR + "]0" + TWO_BYTES_TERMINATOR, command.format(List.of("0")));
+        assertEquals("after", remaining(stream));
+    }
+
+    @Test
+    public void aSequenceThatExactlyFillsTheLimitIsNotTruncated() throws IOException {
+        var withBel = new SystemCommandSequence(
+                new ArrayTerminalDataStream(("2;" + "x".repeat(6) + BEL_CHAR).toCharArray()), 8);
+        assertFalse(withBel.isTruncated());
+        assertEquals(List.of("2", "xxxxxx"), withBel.getArgs());
+
+        // the ESC of ESC \ does not fit, but it is part of the terminator, not of the body
+        var withSt = new SystemCommandSequence(
+                new ArrayTerminalDataStream(("2;" + "x".repeat(6) + TWO_BYTES_TERMINATOR).toCharArray()), 8);
+        assertFalse(withSt.isTruncated());
+        assertEquals(List.of("2", "xxxxxx"), withSt.getArgs());
+    }
+
+    @Test
+    public void anEscInsideTheBodyIsKept() {
+        var command = create("2;a" + ESC_CHAR + "b" + BEL_CHAR);
+        assertFalse(command.isTruncated());
+        assertEquals(List.of("2", "a" + ESC_CHAR + "b"), command.getArgs());
+    }
+
+    private static String remaining(ArrayTerminalDataStream stream) throws IOException {
+        StringBuilder rest = new StringBuilder();
+        while (!stream.isEmpty()) {
+            rest.append(stream.getChar());
+        }
+        return rest.toString();
     }
 
     @SuppressWarnings("unused")

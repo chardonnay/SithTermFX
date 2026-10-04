@@ -27,18 +27,64 @@ public class SystemCommandSequence {
 
     public static final char OSC = '\u009d';
 
+    /**
+     * The longest body (everything between the introducer and the terminator) that is kept. A
+     * sequence is as long as whoever writes to the terminal makes it, and it is read across buffer
+     * refills, so the rest of a longer one is read and dropped: the sequence still ends at its
+     * terminator, and {@link #isTruncated()} tells that it must not be acted on.
+     */
+    public static final int MAX_BODY_LENGTH = 64 * 1024;
+
+    private final boolean truncated;
+
     public SystemCommandSequence(@NotNull TerminalDataStream stream) throws IOException {
+        this(stream, MAX_BODY_LENGTH);
+    }
+
+    SystemCommandSequence(@NotNull TerminalDataStream stream, int maxBodyLength) throws IOException {
         super();
         Intrinsics.checkNotNullParameter(stream, "stream");
-        var textBuf = new StringBuilder();
-        do {
-            textBuf.append(stream.getChar());
-        } while (!isTerminated(textBuf));
-        text = textBuf.toString();
-        var body = StringsKt.dropLast(text, terminatorLength(text));
+        var body = new StringBuilder();
+        int droppedChars = 0;
+        char prev = 0;
+        boolean prevKept = false;
+        String terminator;
+        while (true) {
+            char ch = stream.getChar();
+            if (ch == Ascii.BEL_CHAR || ch == ST) {
+                terminator = String.valueOf(ch);
+                break;
+            }
+            if (ch == '\\' && prev == Ascii.ESC_CHAR) {
+                // the ESC belongs to the terminator, not to the body
+                if (prevKept) {
+                    body.setLength(body.length() - 1);
+                } else {
+                    droppedChars--;
+                }
+                terminator = Ascii.ESC_CHAR + "\\";
+                break;
+            }
+            prevKept = body.length() < maxBodyLength;
+            if (prevKept) {
+                body.append(ch);
+            } else {
+                droppedChars++;
+            }
+            prev = ch;
+        }
+        truncated = droppedChars > 0;
+        text = body + terminator;
         var strArray = new String[]{String.valueOf(ARG_SEPARATOR)};
         var splits = StringsKt.split(body, strArray, false, 0);
         args = List.copyOf(splits);
+    }
+
+    /**
+     * @return whether the sequence was longer than {@link #MAX_BODY_LENGTH} and only its start was kept
+     */
+    public boolean isTruncated() {
+        return truncated;
     }
 
     @NotNull
@@ -77,15 +123,6 @@ public class SystemCommandSequence {
     @Override
     public String toString() {
         return CharUtils.toHumanReadableText(Ascii.ESC_CHAR + "]" + text);
-    }
-
-    private static boolean isTerminated(CharSequence text) {
-        var len = text.length();
-        if (len > 0) {
-            var ch = text.charAt(len - 1);
-            return ch == Ascii.BEL_CHAR || ch == ST || isTwoBytesTerminator(text, len, ch);
-        }
-        return false;
     }
 
     private static boolean isTwoBytesTerminator(CharSequence text, int length, char lastChar) {

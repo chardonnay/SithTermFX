@@ -204,6 +204,12 @@ public class SithEmulator extends DataStreamIteratingEmulator {
 
     private void processOsc() throws IOException {
         SystemCommandSequence osc = new SystemCommandSequence(myDataStream);
+        if (osc.isTruncated()) {
+            // Only the start of an overlong OSC was kept: acting on it would set a cut-off title or
+            // open a cut-off link target, so it is dropped whole.
+            logger.debug("Dropped an OSC longer than {} chars", SystemCommandSequence.MAX_BODY_LENGTH);
+            return;
+        }
         try {
             boolean processed = doProcessOsc(osc);
             if (logger.isDebugEnabled()) {
