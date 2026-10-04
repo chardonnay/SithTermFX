@@ -103,8 +103,7 @@ public class TextProcessing {
                                         line.writeString(currentEntry.getKey(), charBuf, linkStyle);
                                     }
                                 } else {
-                                    var charBuf = new CharBuffer(finalStr);
-                                    line.writeString(x, charBuf, style);
+                                    writeOverAllButExplicitLinks(line, x, finalStr, style);
                                 }
                             }
                             prevLinesLength += myTerminalTextBuffer.getWidth();
@@ -118,6 +117,34 @@ public class TextProcessing {
     }
 
     /**
+     * Writes a link found by a filter in a custom-colour mode over {@code [x, x + str.length())},
+     * except over the cells of an explicit OSC 8 link, which is the program's own and is kept, as in
+     * the original-colour modes.
+     */
+    private static void writeOverAllButExplicitLinks(@NotNull TerminalLine line, int x, @NotNull String str,
+                                                     @NotNull TextStyle linkStyle) {
+        var runs = new ArrayList<>(getStylesByPostion(line, x, str.length()).entrySet());
+        if (runs.stream().noneMatch(run -> isExplicitLink(run.getValue()))) {
+            line.writeString(x, new CharBuffer(str), linkStyle);
+            return;
+        }
+        for (int i = 0; i < runs.size(); i++) {
+            var run = runs.get(i);
+            if (isExplicitLink(run.getValue())) {
+                continue;
+            }
+            int start = run.getKey() - x;
+            int end = i + 1 < runs.size() ? runs.get(i + 1).getKey() - x : str.length();
+            line.writeString(run.getKey(), new CharBuffer(str.substring(start, end)), linkStyle);
+        }
+    }
+
+    /** An explicit OSC 8 link: it has the text style it was started over; filter links never do. */
+    private static boolean isExplicitLink(@NotNull TextStyle style) {
+        return style instanceof HyperlinkStyle && ((HyperlinkStyle) style).getPrevTextStyle() != null;
+    }
+
+    /**
      * The style a cell of a link found by a filter gets in an original-colour mode. A line is
      * processed again on every write to it, so the cell may already carry a link from an earlier
      * pass, made when less of the line had arrived (a URL arriving in chunks or typed at the prompt):
@@ -128,7 +155,7 @@ public class TextProcessing {
     private @NotNull TextStyle styleForLink(@NotNull TextStyle cellStyle, @NotNull LinkInfo linkInfo) {
         if (cellStyle instanceof HyperlinkStyle) {
             HyperlinkStyle existing = (HyperlinkStyle) cellStyle;
-            if (existing.getPrevTextStyle() != null) {
+            if (isExplicitLink(existing)) {
                 return existing;
             }
             if (existing.getLinkInfo() == linkInfo) {

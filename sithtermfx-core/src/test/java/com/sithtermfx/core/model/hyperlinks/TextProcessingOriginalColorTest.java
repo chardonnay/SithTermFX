@@ -96,6 +96,27 @@ public class TextProcessingOriginalColorTest {
         assertSame(explicit, linkAt(5).getLinkInfo());
     }
 
+    @Test
+    public void anOsc8LinkIsNotReplacedByAFilterLinkInACustomColourMode() throws IOException {
+        mySession = new TestSession(60, 3, HyperlinkStyle.HighlightMode.HOVER_WITH_CUSTOM_COLOR);
+        mySession.getTextProcessing().addHyperlinkFilter(new AllLinksFilter());
+        LinkInfo explicit = new LinkInfo(() -> {
+        });
+        mySession.getTextProcessing().setLinkInfoProvider(uri -> explicit);
+
+        // the filter's match covers plain text on both sides of the OSC 8 span
+        mySession.process("link:ab" + ESC + "]8;;https://example.com" + ESC + "\\cd" + ESC + "]8;;" + ESC
+                + "\\ef tail");
+
+        assertEquals("link:abcdef", targetAt(0));
+        assertEquals("link:abcdef", targetAt(6));
+        assertSame(explicit, linkAt(7).getLinkInfo());
+        assertSame(explicit, linkAt(8).getLinkInfo());
+        assertEquals("link:abcdef", targetAt(9));
+        assertEquals("link:abcdef", targetAt(10));
+        assertFalse(styleAt(11) instanceof HyperlinkStyle);
+    }
+
     private @NotNull TextStyle styleAt(int column) {
         return mySession.getTerminalTextBuffer().getStyleAt(column, 0);
     }
