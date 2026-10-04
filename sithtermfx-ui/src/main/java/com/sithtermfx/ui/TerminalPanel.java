@@ -37,6 +37,7 @@ import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.ui.hyperlinks.LinkInfoEx;
 import com.sithtermfx.ui.input.FxMouseEvent;
 import com.sithtermfx.ui.input.FxMouseWheelEvent;
+import com.sithtermfx.ui.settings.ModifierKeys;
 import com.sithtermfx.ui.settings.MutableFontSizeProvider;
 import com.sithtermfx.ui.settings.SettingsProvider;
 import java.awt.Desktop;
@@ -237,6 +238,9 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     private Cursor myCursorType = Cursor.DEFAULT;
 
+    /** Where the pointer rests over the canvas, or null outside it; re-checked when a modifier changes. */
+    private @Nullable Point2D myLastMousePoint;
+
     private LinkInfoEx.HoverConsumer myLinkHoverConsumer;
 
     private TerminalTypeAheadManager myTypeAheadManager;
@@ -349,6 +353,8 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         } else {
             graphicsContext.setImageSmoothing(false);
         }
+        this.canvas.addEventFilter(KeyEvent.KEY_PRESSED, this::handleModifierKeyChange);
+        this.canvas.addEventFilter(KeyEvent.KEY_RELEASED, this::handleModifierKeyChange);
         this.canvas.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (e.isConsumed()) {
                 return;
@@ -368,7 +374,8 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             }
         });
         this.canvas.addEventHandler(MouseEvent.MOUSE_MOVED, (e) -> {
-            handleHyperlinks(createPoint(e));
+            myLastMousePoint = createPoint(e);
+            handleHyperlinks(myLastMousePoint, ModifierKeys.of(e));
         });
         this.canvas.addEventHandler(MouseEvent.MOUSE_DRAGGED, e -> {
             doOnMouseDragged(e);
@@ -379,6 +386,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             }
         });
         this.canvas.addEventHandler(MouseEvent.MOUSE_EXITED, e -> {
+            myLastMousePoint = null;
             if (myLinkHoverConsumer != null) {
                 myLinkHoverConsumer.onMouseExited();
                 myLinkHoverConsumer = null;
@@ -465,6 +473,8 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             return;
         }
         var point = createPoint(e);
+        // The modifiers may have changed since the last move without a key event reaching the canvas.
+        handleHyperlinks(point, ModifierKeys.of(e));
         HyperlinkStyle hyperlink = isFollowLinkEvent(e) ? findHyperlink(point) : null;
         if (hyperlink != null) {
             hyperlink.getLinkInfo().navigate();
@@ -547,7 +557,29 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     }
 
     private boolean isFollowLinkEvent(@NotNull MouseEvent e) {
-        return myCursorType == Cursor.HAND && e.getButton() == MouseButton.PRIMARY;
+        return myCursorType == Cursor.HAND && isFollowLinkClick(mySettingsProvider, e);
+    }
+
+    /** Whether a click is one that follows the link under the pointer, as far as the button and modifiers go. */
+    static boolean isFollowLinkClick(@NotNull SettingsProvider settingsProvider, @NotNull MouseEvent e) {
+        return e.getButton() == MouseButton.PRIMARY && settingsProvider.isFollowLinkGesture(ModifierKeys.of(e));
+    }
+
+    /**
+     * Whether a hovered link shows the hand cursor and its hover highlight: not in the NEVER modes, and
+     * only while the modifiers held are those that follow a link.
+     */
+    static boolean isLinkHoverActive(@NotNull SettingsProvider settingsProvider, @NotNull HyperlinkStyle linkStyle,
+                                     @NotNull ModifierKeys modifiers) {
+        return linkStyle.getHighlightMode() != HyperlinkStyle.HighlightMode.NEVER_WITH_ORIGINAL_COLOR
+                && linkStyle.getHighlightMode() != HyperlinkStyle.HighlightMode.NEVER_WITH_CUSTOM_COLOR
+                && settingsProvider.isFollowLinkGesture(modifiers);
+    }
+
+    private void handleModifierKeyChange(@NotNull KeyEvent e) {
+        if (myLastMousePoint != null && e.getCode().isModifierKey()) {
+            handleHyperlinks(myLastMousePoint, ModifierKeys.of(e));
+        }
     }
 
     private Point2D createPoint(MouseEvent e) {
@@ -567,7 +599,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         e.consume();
     }
 
-    private void handleHyperlinks(@NotNull Point2D panelPoint) {
+    private void handleHyperlinks(@NotNull Point2D panelPoint, @NotNull ModifierKeys modifiers) {
         Cell cell = panelPointToCell(panelPoint);
         HyperlinkStyle linkStyle = findHyperlink(cell);
         LinkInfo linkInfo = linkStyle != null ? linkStyle.getLinkInfo() : null;
@@ -582,9 +614,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             }
         }
         myLinkHoverConsumer = linkHoverConsumer;
-        if (linkStyle != null
-                && linkStyle.getHighlightMode() != HyperlinkStyle.HighlightMode.NEVER_WITH_ORIGINAL_COLOR
-                && linkStyle.getHighlightMode() != HyperlinkStyle.HighlightMode.NEVER_WITH_CUSTOM_COLOR) {
+        if (linkStyle != null && isLinkHoverActive(mySettingsProvider, linkStyle, modifiers)) {
             updateHoveredHyperlink(linkStyle.getLinkInfo());
         } else {
             updateHoveredHyperlink(null);

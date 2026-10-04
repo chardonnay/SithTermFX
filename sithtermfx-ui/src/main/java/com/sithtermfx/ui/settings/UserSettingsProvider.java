@@ -71,6 +71,25 @@ public interface UserSettingsProvider {
 
     HyperlinkStyle.HighlightMode getHyperlinkHighlightingMode();
 
+    /**
+     * Decides whether links react to the pointer while the given modifier keys are held: whether a
+     * primary click on a link follows it, and whether hovering a link shows the hand cursor and the
+     * hover highlight of {@link #getHyperlinkHighlightingMode()}. A click that does not follow a link
+     * acts as on plain text, so a double click selects a word and a triple click a line.
+     * <p>
+     * The default follows a link on every primary click, as before. An embedder that follows links
+     * only on a modifier click, e.g. Cmd+click on macOS and Ctrl+click elsewhere, returns
+     * {@code modifiers.isShortcutDown()} (and {@code && !modifiers.isAltDown()} to keep AltGr, which
+     * Windows reports as Ctrl+Alt, out of it). The hover state follows the modifier keys as they are
+     * pressed and released while the pointer rests over a link.
+     *
+     * @param modifiers the modifier keys held during the click or the hover
+     * @return whether a link under the pointer is followed on a click and highlighted on hover
+     */
+    default boolean isFollowLinkGesture(@NotNull ModifierKeys modifiers) {
+        return true;
+    }
+
     default boolean enableTextBlinking() {
         return false;
     }
