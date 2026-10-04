@@ -27,10 +27,13 @@ public class TestSession {
     private final StyleState myStyleState;
 
     public TestSession(int width, int height) {
+        this(width, height, HyperlinkStyle.HighlightMode.ALWAYS_WITH_CUSTOM_COLOR);
+    }
+
+    public TestSession(int width, int height, @NotNull HyperlinkStyle.HighlightMode hyperlinkHighlightMode) {
         myStyleState = new StyleState();
         TextStyle hyperlinkTextStyle = new TextStyle(TerminalColor.fromColor(BLUE), TerminalColor.WHITE);
-        myTextProcessing = new TextProcessing(hyperlinkTextStyle,
-                HyperlinkStyle.HighlightMode.ALWAYS_WITH_CUSTOM_COLOR);
+        myTextProcessing = new TextProcessing(hyperlinkTextStyle, hyperlinkHighlightMode);
         myTerminalTextBuffer = new TerminalTextBuffer(width, height, myStyleState, myTextProcessing);
         myTextProcessing.setTerminalTextBuffer(myTerminalTextBuffer);
         myTerminal = new BackBufferTerminal(myTerminalTextBuffer, myStyleState);

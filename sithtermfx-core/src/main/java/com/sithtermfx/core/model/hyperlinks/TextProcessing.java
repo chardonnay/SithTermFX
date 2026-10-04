@@ -98,16 +98,9 @@ public class TextProcessing {
                                         } else {
                                             str = finalStr.substring(currentEntry.getKey() - x, nextEntry.getKey() - x);
                                         }
-                                        var originalStyle = currentEntry.getValue();
-                                        //is there any sense to create HyperLinkStyle from HyperLinkStyle?
-                                        //note, that this method will be called twice
-                                        if (!(originalStyle instanceof HyperlinkStyle)) {
-                                            originalStyle = new HyperlinkStyle(myHyperlinkColor.getForeground(),
-                                                    myHyperlinkColor.getBackground(), item.getLinkInfo(),
-                                                    myHighlightMode, null, originalStyle);
-                                        }
+                                        TextStyle linkStyle = styleForLink(currentEntry.getValue(), item.getLinkInfo());
                                         var charBuf = new CharBuffer(str);
-                                        line.writeString(currentEntry.getKey(), charBuf, originalStyle);
+                                        line.writeString(currentEntry.getKey(), charBuf, linkStyle);
                                     }
                                 } else {
                                     var charBuf = new CharBuffer(finalStr);
@@ -124,7 +117,38 @@ public class TextProcessing {
         }
     }
 
-    private Map<Integer, TextStyle> getStylesByPostion(TerminalLine line, int x, int length) {
+    /**
+     * The style a cell of a link found by a filter gets in an original-colour mode. A line is
+     * processed again on every write to it, so the cell may already carry a link from an earlier
+     * pass, made when less of the line had arrived (a URL arriving in chunks or typed at the prompt):
+     * that link is replaced, keeping the original style beneath it, so its target is the one found
+     * now rather than a truncated one. An explicit OSC 8 link (it has a prevTextStyle; filter links
+     * never do) is the program's own and is kept.
+     */
+    private @NotNull TextStyle styleForLink(@NotNull TextStyle cellStyle, @NotNull LinkInfo linkInfo) {
+        if (cellStyle instanceof HyperlinkStyle) {
+            HyperlinkStyle existing = (HyperlinkStyle) cellStyle;
+            if (existing.getPrevTextStyle() != null) {
+                return existing;
+            }
+            if (existing.getLinkInfo() == linkInfo) {
+                return existing;
+            }
+            cellStyle = existing.getOriginalStyle() != null ? existing.getOriginalStyle() : TextStyle.EMPTY;
+        }
+        return new HyperlinkStyle(myHyperlinkColor.getForeground(), myHyperlinkColor.getBackground(), linkInfo,
+                myHighlightMode, null, cellStyle);
+    }
+
+    /**
+     * The style runs of {@code line} within {@code [x, x + length)}: the start column of each run,
+     * mapped to its style. Runs are told apart by style identity, not {@link TextStyle#equals}: equal
+     * styles in separate runs are separate runs, and {@code equals} ignores what makes two links
+     * differ (every filter-made {@link HyperlinkStyle} has the same null colours, whatever its
+     * target and original style), which made the later links of a line take the first one's
+     * colours and target.
+     */
+    static @NotNull Map<Integer, TextStyle> getStylesByPostion(@NotNull TerminalLine line, int x, int length) {
         var treeMap = new TreeMap<Integer, TextStyle>();
         var entriesLength = 0;
         for (var e : line.getEntries()) {
@@ -137,10 +161,13 @@ public class TextProcessing {
         if (entry == null) {
             return result;
         }
-        result.put(x, entry.getValue());
+        TextStyle runStyle = entry.getValue();
+        result.put(x, runStyle);
+        entry = treeMap.higherEntry(entry.getKey());
         while (entry != null && entry.getKey() <= end) {
-            if (!result.containsValue(entry.getValue())) {
-                result.put(entry.getKey(), entry.getValue());
+            if (entry.getValue() != runStyle) {
+                runStyle = entry.getValue();
+                result.put(entry.getKey(), runStyle);
             }
             entry = treeMap.higherEntry(entry.getKey());
         }
