@@ -5,6 +5,34 @@ All notable changes to SithTermFX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-10-04
+
+### Added
+
+- `UserSettingsProvider.isFollowLinkGesture(ModifierKeys)` decides which clicks follow a link and when a hovered link shows the hand cursor and its hover highlight. The default follows a link on every primary click, as before; an embedder can require a modifier click (e.g. `modifiers.isShortcutDown()` for Cmd+click on macOS and Ctrl+click elsewhere). A click that does not follow a link acts as on plain text, so double and triple clicks on a link select a word or a line. The hover state follows the modifier keys as they are pressed and released over a link. `com.sithtermfx.ui.settings.ModifierKeys` carries the modifier state from a `MouseEvent` or `KeyEvent`.
+- `HyperlinkStyle.getUnderlyingStyle()` returns the style of the text beneath a link, for embedders that render the buffer themselves.
+- `SystemCommandSequence.MAX_BODY_LENGTH` and `isTruncated()` (see Security).
+
+### Fixed
+
+- OSC 8 link text keeps its colours and attributes. A link that was not hovered was drawn in the default colours in every original-colour highlight mode (including the default `HOVER_WITH_BOTH_COLORS`), because `TerminalPanel.provideOriginalStyle()` fell back to the colourless `HyperlinkStyle` instead of the text style the link was started over; `ls --hyperlink --color` lost its colours and bold. The hover style of an OSC 8 link now also keeps the text's attributes, not only its colours.
+- SGR inside an OSC 8 span is no longer ignored: `HyperlinkStyle.Builder` now carries the colours and options set on it, so `ESC]8;;uri ST ESC[1;34m name` is drawn bold blue, and inverse selection and search highlighting work on links. SGR 0 resets the attributes without ending the link (hyperlinks are independent of SGR); closing a link leaves the SGR state as it is, as in xterm.
+- Links found by a `HyperlinkFilter` in an original-colour mode no longer keep stale, truncated targets when a line is processed again (output arriving in chunks, a URL typed at the prompt), and no longer collapse into the first run's colours and target: style runs are told apart by identity, not `equals()`, which treats every filter-made `HyperlinkStyle` as equal. An explicit OSC 8 link is never replaced by a filter link, in any highlight mode.
+- An OSC 8 link opened while another is open replaces it instead of nesting inside it, so the new link keeps the text's style and one closing OSC 8 ends it.
+- A link is followed only on the first click of a multi-click and not on the release that ends a drag: a double click no longer opens a link twice, and a selection dragged over a link no longer opens it.
+- `NEVER_WITH_CUSTOM_COLOR` no longer throws for a filter link without a previous text style.
+- Hyperlink hit-testing no longer reads the row one past the bottom of the screen when the pointer is over the bottom margin of the canvas.
+- On macOS the character of a Cmd shortcut chord (the "d" of Cmd+Shift+D, previously only Cmd+backtick was handled) is no longer written to the pty after a menu accelerator consumed the key press. Ctrl chords and AltGr input (reported as Ctrl+Alt on Windows) are unaffected.
+- OSC 104 (reset colour) no longer falls through into the OSC 1341 branch and is no longer delivered to `TerminalCustomCommandListener`s.
+- `junit-jupiter-api` is a test dependency again; 1.2.2 published it as a compile dependency of `sithtermfx-core` and `sithtermfx-ui`.
+
+### Security
+
+- A CSI sequence with more than about a thousand characters the parser cannot place (intermediate bytes, control characters, a misplaced `?`), or with one such character beside a few hundred parameters, threw `ArrayIndexOutOfBoundsException` in `ControlSequence.pushBackReordered()` on the emulator thread and ended the session. Any remote output could carry one. The push-back is now bounded: the sequence is always pushed back terminated, and what does not fit is dropped, whole parameters at a time. A sequence that fits is handled exactly as before.
+- OSC and DCS strings are capped at 64 Ki characters. A longer one is read to its terminator and dropped instead of growing a buffer without bound, and is not acted on, so a cut-off title or link target is never applied.
+
+---
+
 ## [1.2.2] - 2026-09-09
 
 ### Fixed

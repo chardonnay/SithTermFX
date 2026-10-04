@@ -44,7 +44,7 @@ Release artifacts (JARs and application tarball) are published on the link:https
 *No authentication is required* — anyone can download them.
 
 * Latest release: link:https://github.com/chardonnay/SithTermFX/releases/latest[Releases → Latest]
-* Direct download URLs (replace `VERSION` with the release you want, for example `1.2.2`):
+* Direct download URLs (replace `VERSION` with the release you want, for example `1.2.3`):
 ** Application JAR: `https://github.com/chardonnay/SithTermFX/releases/download/vVERSION/sithtermfx-app-VERSION.jar`
 ** Core library: `sithtermfx-core-VERSION.jar`, UI library: `sithtermfx-ui-VERSION.jar`
 ** Standalone app tarball: `sithtermfx-app-VERSION.tar`
