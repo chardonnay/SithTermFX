@@ -9,6 +9,13 @@ import java.util.ArrayList;
 
 public class ControlSequence {
 
+    /**
+     * {@link #pushBackReordered} hands the stray characters and the re-emitted sequence back in one
+     * array of this size. How long a sequence gets is up to whoever writes to the terminal, so what
+     * does not fit is dropped.
+     */
+    private static final int MAX_PUSH_BACK_LENGTH = 1024;
+
     private int myArgc;
 
     private int[] myArgv;
@@ -78,14 +85,24 @@ public class ControlSequence {
         if (myUnhandledChars == null) {
             myUnhandledChars = new ArrayList<>();
         }
-        myUnhandledChars.add(b);
+        // More stray characters than fit into the push-back are never read again: don't keep them.
+        if (myUnhandledChars.size() < MAX_PUSH_BACK_LENGTH) {
+            myUnhandledChars.add(b);
+        }
     }
 
     public boolean pushBackReordered(final TerminalDataStream channel) throws IOException {
         if (myUnhandledChars == null) return false;
-        final char[] bytes = new char[1024]; // can't be more than the whole buffer...
+        final char[] bytes = new char[MAX_PUSH_BACK_LENGTH];
+        // The sequence is always pushed back terminated: ESC, '[', the marker and the final char
+        // keep their room. Stray characters that do not fit are dropped, and so are the parameters
+        // from the first one that does not fit, as xterm drops the parameters beyond its limit.
+        final int markerLength =
+                myStartsWithExclamationMark || myStartsWithQuestionMark || myStartsWithMoreMark ? 1 : 0;
+        final int maxStrayChars = MAX_PUSH_BACK_LENGTH - 3 - markerLength;
         int i = 0;
         for (final char b : myUnhandledChars) {
+            if (i == maxStrayChars) break;
             bytes[i++] = b;
         }
         bytes[i++] = (byte) Ascii.ESC;
@@ -100,8 +117,9 @@ public class ControlSequence {
             bytes[i++] = (byte) '>';
         }
         for (int argi = 0; argi < myArgc; argi++) {
-            if (argi != 0) bytes[i++] = ';';
             String s = Integer.toString(myArgv[argi]);
+            if (i + (argi != 0 ? 1 : 0) + s.length() >= MAX_PUSH_BACK_LENGTH) break;
+            if (argi != 0) bytes[i++] = ';';
             for (int j = 0; j < s.length(); j++) {
                 bytes[i++] = s.charAt(j);
             }
