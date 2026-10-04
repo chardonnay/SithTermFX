@@ -1504,7 +1504,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
                     break;
                 case NEVER_WITH_CUSTOM_COLOR:
                     style = hyperlinkStyle.getCustomStyle();
-                    shouldUnderline = hyperlinkStyle.getPrevTextStyle().hasOption(Option.UNDERLINED);
+                    shouldUnderline = provideOriginalStyle(hyperlinkStyle).hasOption(Option.UNDERLINED);
                     break;
                 case HOVER_WITH_ORIGINAL_COLOR:
                     style = provideOriginalStyle(hyperlinkStyle);
@@ -1555,16 +1555,18 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     }
 
     /**
-     * When selection original style = null.
-     * @param link
-     * @return
+     * The style a link is drawn in when it is not highlighted: the text beneath it. That is the
+     * original style a hyperlink filter kept, else the text style an OSC 8 link was started over (so
+     * OSC 8 text keeps its colours and attributes), else the colours the link style carries itself.
      */
-    private @NotNull TextStyle provideOriginalStyle(@NotNull HyperlinkStyle link) {
+    static @NotNull TextStyle provideOriginalStyle(@NotNull HyperlinkStyle link) {
         if (link.getOriginalStyle() != null) {
             return link.getOriginalStyle();
-        } else {
-            return link;
         }
+        if (link.getPrevTextStyle() != null) {
+            return link.getPrevTextStyle();
+        }
+        return link;
     }
 
     private boolean isHoveredHyperlink(@NotNull HyperlinkStyle link) {

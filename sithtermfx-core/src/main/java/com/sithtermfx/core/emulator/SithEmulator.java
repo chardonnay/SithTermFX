@@ -3,6 +3,7 @@ package com.sithtermfx.core.emulator;
 import com.sithtermfx.core.TerminalDataStream;
 import com.sithtermfx.core.DataStreamIteratingEmulator;
 import com.sithtermfx.core.TerminalColor;
+import com.sithtermfx.core.HyperlinkStyle;
 import com.sithtermfx.core.TextStyle;
 import com.sithtermfx.core.RequestOrigin;
 import com.sithtermfx.core.Terminal;
@@ -906,7 +907,7 @@ public class SithEmulator extends DataStreamIteratingEmulator {
         TextStyle.Builder builder = textStyle.toBuilder();
         final int argCount = args.getCount();
         if (argCount == 0) {
-            builder = new TextStyle.Builder();
+            builder = resetAttributes(builder);
         }
         int i = 0;
         while (i < argCount) {
@@ -919,7 +920,7 @@ public class SithEmulator extends DataStreamIteratingEmulator {
             }
             switch (arg) {
                 case 0: //Normal (default)
-                    builder = new TextStyle.Builder();
+                    builder = resetAttributes(builder);
                     break;
                 case 1:// Bold
                     builder.setOption(TextStyle.Option.BOLD, true);
@@ -1035,6 +1036,17 @@ public class SithEmulator extends DataStreamIteratingEmulator {
             i = i + step;
         }
         return builder.build();
+    }
+
+    /**
+     * SGR 0: back to the default attributes. An open OSC 8 link stays open, since hyperlinks are
+     * independent of SGR and only a closing OSC 8 ends one.
+     */
+    private static @NotNull TextStyle.Builder resetAttributes(@NotNull TextStyle.Builder builder) {
+        if (builder instanceof HyperlinkStyle.Builder) {
+            return ((HyperlinkStyle.Builder) builder).resetTextAttributes();
+        }
+        return new TextStyle.Builder();
     }
 
     private static TerminalColor getColor256(ControlSequence args, int index) {
