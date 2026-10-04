@@ -263,6 +263,7 @@ public class SithEmulator extends DataStreamIteratingEmulator {
                 // Let's support resetting to avoid warnings.
                 // As there is no support for `Ps = 4 ; c ; spec` (Change Color Number c to the color specified by spec),
                 // resetting is just no operation.
+                return true;
             case 1341:
                 List<String> argList = args.getArgs();
                 myTerminal.processCustomCommand(argList.subList(1, argList.size()));
