@@ -1049,7 +1049,13 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
         // the URI via the registered provider instead of routing it through the autolink filters.
         LinkInfo linkInfo = textProcessing.createExplicitLink(uri);
         if (linkInfo != null) {
-            myStyleState.setCurrent(new HyperlinkStyle(myStyleState.getCurrent(), linkInfo));
+            // A new OSC 8 link while one is open replaces it: it starts over the text style beneath
+            // the open link, so the links do not nest and closing it ends both.
+            TextStyle current = myStyleState.getCurrent();
+            if (current instanceof HyperlinkStyle && ((HyperlinkStyle) current).getPrevTextStyle() != null) {
+                current = ((HyperlinkStyle) current).getPrevTextStyle();
+            }
+            myStyleState.setCurrent(new HyperlinkStyle(current, linkInfo));
         }
     }
 

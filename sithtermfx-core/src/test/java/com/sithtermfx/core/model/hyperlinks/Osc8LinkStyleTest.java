@@ -91,6 +91,29 @@ public class Osc8LinkStyleTest {
     }
 
     @Test
+    public void aLinkOpenedInsideAnOpenLinkReplacesIt() throws IOException {
+        LinkInfo first = new LinkInfo(() -> {
+        });
+        LinkInfo second = new LinkInfo(() -> {
+        });
+        mySession.getTextProcessing().setLinkInfoProvider(uri -> uri.endsWith("one") ? first : second);
+
+        mySession.process(ESC + "[32m" + open("https://example.com/one") + "a"
+                + open("https://example.com/two") + "b" + close() + "c");
+
+        assertSame(first, linkAt(0).getLinkInfo());
+        HyperlinkStyle replaced = linkAt(1);
+        assertSame(second, replaced.getLinkInfo());
+        // the second link starts over the text beneath the first one, not over the first link
+        assertFalse(replaced.getUnderlyingStyle() instanceof HyperlinkStyle);
+        assertStyle(replaced.getUnderlyingStyle(), TerminalColor.index(2), null);
+        // one closing OSC 8 ends it: the links do not nest
+        TextStyle after = styleAt(2);
+        assertFalse(after instanceof HyperlinkStyle);
+        assertStyle(after, TerminalColor.index(2), null);
+    }
+
+    @Test
     public void builderCarriesColoursAndOptionsOfAnOsc8Link() {
         TextStyle text = new TextStyle(TerminalColor.index(3), null, EnumSet.of(Option.ITALIC));
         HyperlinkStyle link = new HyperlinkStyle(text, myLinkInfo);
