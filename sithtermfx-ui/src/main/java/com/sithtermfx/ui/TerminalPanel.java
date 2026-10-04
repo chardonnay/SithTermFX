@@ -2203,14 +2203,26 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         return e.isAltDown() && !e.isControlDown() && !e.isShiftDown();
     }
 
+    /**
+     * True when the character carried by a key event is the residue of a shortcut chord and must
+     * not be written to the pty. Menu accelerators consume only the KEY_PRESSED half of a chord;
+     * on macOS the paired KEY_TYPED event (e.g. the "d" of Cmd+Shift+D) is still delivered to the
+     * terminal canvas afterwards. This also covers macOS window cycling via Cmd+backtick, which
+     * used to be special-cased here. Ctrl is deliberately not suppressed: plain Ctrl chords
+     * surface as ISO control characters that never reach this path, and Windows AltGr input is
+     * reported as Ctrl+Alt yet must keep producing composed characters (@, {, €, ...).
+     */
+    static boolean isShortcutChordCharacter(@NotNull KeyEvent e) {
+        return e.isMetaDown();
+    }
+
     private boolean processCharacter(@NotNull KeyEvent e, @NotNull char keyChar) {
         if (isAltPressedOnly(e) && mySettingsProvider.altSendsEscape()) {
             return false;
         }
         final char[] obuffer;
         obuffer = new char[]{keyChar};
-        if (keyChar == '`' && e.isMetaDown()) {
-            // Command + backtick is a short-cut on Mac OSX, so we shouldn't type anything
+        if (isShortcutChordCharacter(e)) {
             return false;
         }
         myTerminalStarter.sendString(new String(obuffer), true);
