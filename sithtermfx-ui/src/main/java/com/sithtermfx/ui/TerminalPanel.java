@@ -617,15 +617,20 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     }
 
     private @Nullable HyperlinkStyle findHyperlink(@Nullable Cell cell) {
-        if (cell != null && cell.getColumn() >= 0 && cell.getColumn() < myTerminalTextBuffer.getWidth()
-                && cell.getLine() >= -myTerminalTextBuffer.getHistoryLinesCount()
-                && cell.getLine() <= myTerminalTextBuffer.getHeight()) {
+        if (isCellInsideTextBuffer(cell, myTerminalTextBuffer)) {
             TextStyle style = myTerminalTextBuffer.getStyleAt(cell.getColumn(), cell.getLine());
             if (style instanceof HyperlinkStyle) {
                 return (HyperlinkStyle) style;
             }
         }
         return null;
+    }
+
+    static boolean isCellInsideTextBuffer(@Nullable Cell cell, @NotNull TerminalTextBuffer terminalTextBuffer) {
+        return cell != null
+                && cell.getColumn() >= 0 && cell.getColumn() < terminalTextBuffer.getWidth()
+                && cell.getLine() >= -terminalTextBuffer.getHistoryLinesCount()
+                && cell.getLine() < terminalTextBuffer.getHeight();
     }
 
     public void repaint() {
