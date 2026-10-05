@@ -5,6 +5,23 @@ All notable changes to SithTermFX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-10-05
+
+### Added
+
+- `UserSettingsProvider.getBoldTextMode()` chooses how bold text (SGR 1) is drawn: `BoldTextMode.BOLD_FONT` (the default, unchanged), `BRIGHT_COLOR` (xterm's `boldColors`: bold text in one of the eight basic ANSI colours, SGR 30–37 / palette 0–7, takes the matching bright colour 8–15 of the palette, custom palettes included, with the normal font weight) or `BOLD_FONT_AND_BRIGHT_COLOR`. Only a basic ANSI foreground is brightened; the default foreground, the bright colours, the 256-colour cube (16–255) and truecolour stay as they are (`SGR 38;5;0`–`7` names the same eight palette entries and is brightened too, as in xterm). The text's own colour is brightened before inverse video, selection, search and link highlighting are applied, so inverse bold text gets a bright background and the selection, found-pattern and link colours from the settings are never brightened; of an OSC 8 or filter link, the text beneath it (`HyperlinkStyle.getUnderlyingStyle()`) is brightened and the link is kept.
+- `SystemSettingsProvider.getSearchBarText()` returns the find bar's strings as a `com.sithtermfx.ui.settings.SearchBarText` (placeholder, "Ignore Case" check box and its tooltip, match counter, "No matches", the next/previous buttons and their tooltips). Every method has the English default, so an embedder overrides only what it translates; the library ships no translations.
+
+### Changed
+
+- The find bar's search field shows a placeholder, and its buttons and check box have tooltips.
+
+### Fixed
+
+- A search text that is not found shows "No matches" in the find bar instead of keeping the counter of the previous search.
+
+---
+
 ## [1.2.3] - 2026-10-04
 
 ### Added

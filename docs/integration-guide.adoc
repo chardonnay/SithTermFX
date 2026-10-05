@@ -48,12 +48,12 @@ They are attached to each release by CI and are not published to GitHub Packages
 ----
 
 To use the JARs from GitHub Releases without a Maven repository, download them and install to your local repo (once per version).
-`-Dversion` must match the version in the file name you downloaded — `1.2.3` below is only the release current at the time of writing:
+`-Dversion` must match the version in the file name you downloaded — `1.2.4` below is only the release current at the time of writing:
 
 [source,bash]
 ----
-mvn install:install-file -Dfile=sithtermfx-core-1.2.3.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-core -Dversion=1.2.3 -Dpackaging=jar
-mvn install:install-file -Dfile=sithtermfx-ui-1.2.3.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-ui -Dversion=1.2.3 -Dpackaging=jar
+mvn install:install-file -Dfile=sithtermfx-core-1.2.4.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-core -Dversion=1.2.4 -Dpackaging=jar
+mvn install:install-file -Dfile=sithtermfx-ui-1.2.4.jar -DgroupId=com.sithtermfx -DartifactId=sithtermfx-ui -Dversion=1.2.4 -Dpackaging=jar
 ----
 
 === Gradle (Kotlin DSL)
