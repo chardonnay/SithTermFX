@@ -449,6 +449,63 @@ import com.sithtermfx.core.CursorShape;
 widget.getTerminalPanel().setCursorShape(CursorShape.STEADY_UNDERLINE);
 ----
 
+=== Bold Text in Bright Colours
+
+By default bold text (SGR 1) is drawn with a bold font in its own colour. Override
+`getBoldTextMode()` to draw bold text in one of the eight basic ANSI colours (SGR 30–37, palette
+indices 0–7) in the matching bright colour (8–15) of your palette instead, as xterm's
+`boldColors` and the "draw bold text in bright colours" option of most terminals do:
+
+[source,java]
+----
+import com.sithtermfx.ui.settings.BoldTextMode;
+
+@Override
+public @NotNull BoldTextMode getBoldTextMode() {
+    return BoldTextMode.BOLD_FONT_AND_BRIGHT_COLOR;
+}
+----
+
+[cols="1,2",options="header"]
+|===
+| Mode                         | Bold text is drawn
+| `BOLD_FONT` (default)        | with a bold font, in its own colour
+| `BRIGHT_COLOR`               | with the normal font weight, a basic ANSI colour in its bright variant
+| `BOLD_FONT_AND_BRIGHT_COLOR` | with a bold font, a basic ANSI colour in its bright variant
+|===
+
+Only a basic ANSI foreground is brightened; the default foreground, the bright colours, the
+256-colour cube and truecolour are drawn as they are. The text's own colour is brightened before
+inverse video, selection, search and link highlighting are applied, so inverse bold text gets the
+bright colour as its background, and the selection, found-pattern and link colours from your
+settings are never changed. The panel reads the mode on every repaint.
+
+=== Localizing the Find Bar
+
+The find bar (Ctrl+F, Cmd+F on macOS) is English by default. The library ships no translations;
+return your own `SearchBarText` from `getSearchBarText()` in your settings provider and override
+the strings you translate — every method has the English default:
+
+[source,java]
+----
+import com.sithtermfx.ui.settings.SearchBarText;
+
+@Override
+public @NotNull SearchBarText getSearchBarText() {
+    return new SearchBarText() {
+        @Override public @NotNull String placeholder() { return bundle.getString("find.placeholder"); }
+        @Override public @NotNull String ignoreCase() { return bundle.getString("find.ignoreCase"); }
+        @Override public @NotNull String noMatches() { return bundle.getString("find.noMatches"); }
+        @Override public @NotNull String matchCounter(int current, int total) {
+            return MessageFormat.format(bundle.getString("find.counter"), current, total);
+        }
+    };
+}
+----
+
+`SearchBarText` also covers the check box tooltip, the next/previous buttons (`nextMatch()`,
+`previousMatch()`) and their tooltips. The find bar reads it each time it is opened.
+
 '''
 
 == 6. Dynamic Font Size

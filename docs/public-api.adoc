@@ -39,6 +39,8 @@ The following packages are considered public and stable within a major version:
 * Split integration via `com.sithtermfx.ui.split.TerminalSplitPane`
 * *OSC 8 hyperlink resolution* via `com.sithtermfx.core.model.hyperlinks.LinkInfoProvider` (register with `SithTermFxWidget.setLinkInfoProvider`)
 * *Link click policy* via `UserSettingsProvider.isFollowLinkGesture(com.sithtermfx.ui.settings.ModifierKeys)`
+* *Bold text in bright colours* via `UserSettingsProvider.getBoldTextMode()` returning `com.sithtermfx.ui.settings.BoldTextMode`
+* *Find bar strings* (localization) via `SystemSettingsProvider.getSearchBarText()` returning `com.sithtermfx.ui.settings.SearchBarText`
 
 == Emulation Types
 

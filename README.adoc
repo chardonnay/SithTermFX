@@ -83,6 +83,12 @@ If you need a dark theme, you should override the `getDefaultForeground()` and `
 `UserSettingsProvider`.
 To run the demo application in dark theme see <<application-maven>>.
 
+=== Bold Text and Find Bar
+
+`getBoldTextMode()` in `UserSettingsProvider` draws bold text in the bright variant of a basic ANSI colour (xterm's `boldColors`), with or without the bold font; the default keeps the bold font only.
+The find bar is English by default; return your own `SearchBarText` from `getSearchBarText()` to translate its strings.
+See the link:docs/integration-guide.adoc[Integration Guide] for details.
+
 === Dynamic Font Size
 
 Use `DynamicFontSizeSettingsProvider` (or extend it) to enable runtime font resizing without disconnecting the terminal:
