@@ -16,7 +16,8 @@ import org.jetbrains.annotations.NotNull;
  *     };
  * }
  * }</pre>
- * The library ships no translations; see {@link SystemSettingsProvider#getSearchBarText()}.
+ * An empty string leaves out a placeholder or a tooltip. The library ships no translations; see
+ * {@link SystemSettingsProvider#getSearchBarText()}.
  */
 public interface SearchBarText {
 

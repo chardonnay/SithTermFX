@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /** The find bar's strings come from the embedder's {@link SearchBarText}, English by default. */
@@ -59,6 +60,12 @@ public class FindComponentTextTest {
     public void theCounterUsesTheEmbeddersWording() {
         assertEquals("2 von 5", FindComponent.labelText(GERMAN, "a", new StubResult(5, 2)));
         assertEquals("2 of 5", FindComponent.labelText(SearchBarText.ENGLISH, "a", new StubResult(5, 2)));
+    }
+
+    @Test
+    public void anEmptyTooltipTextLeavesTheTooltipOut() {
+        assertNull(FindComponent.tooltip(""));
+        assertNull(FindComponent.tooltip(null));
     }
 
     private static final class StubResult implements FindResult {

@@ -32,14 +32,14 @@ final class FindComponent {
         this.text = Objects.requireNonNullElse(jediTermWidget.mySettingsProvider.getSearchBarText(),
                 SearchBarText.ENGLISH);
         this.ignoreCaseCheckBox = new CheckBox(text.ignoreCase());
-        this.ignoreCaseCheckBox.setTooltip(new Tooltip(text.ignoreCaseTooltip()));
+        this.ignoreCaseCheckBox.setTooltip(tooltip(text.ignoreCaseTooltip()));
         this.ignoreCaseCheckBox.setSelected(true);
         this.textField.setPromptText(text.placeholder());
         Button next = new Button(text.nextMatch());
-        next.setTooltip(new Tooltip(text.nextMatchTooltip()));
+        next.setTooltip(tooltip(text.nextMatchTooltip()));
         next.setOnAction(e -> onResultUpdated(jediTermWidget.getTerminalPanel().selectNextFindResultItem()));
         Button prev = new Button(text.previousMatch());
-        prev.setTooltip(new Tooltip(text.previousMatchTooltip()));
+        prev.setTooltip(tooltip(text.previousMatchTooltip()));
         prev.setOnAction(e -> onResultUpdated(jediTermWidget.getTerminalPanel().selectPrevFindResultItem()));
         var charSize = jediTermWidget.myTerminalPanel.myCharSize;
         HBox.setHgrow(textField, Priority.ALWAYS);
@@ -70,6 +70,14 @@ final class FindComponent {
 
     CheckBox getIgnoreCaseCheckBox() {
         return ignoreCaseCheckBox;
+    }
+
+    /**
+     * A tooltip showing {@code text}, or none for an empty text: an embedder that wants no tooltip
+     * returns an empty string, and JavaFX would otherwise pop up an empty box.
+     */
+    static @Nullable Tooltip tooltip(@Nullable String text) {
+        return text == null || text.isEmpty() ? null : new Tooltip(text);
     }
 
     private void updateLabel(@Nullable FindResult result) {
