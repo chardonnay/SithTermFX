@@ -37,6 +37,7 @@ import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.ui.hyperlinks.LinkInfoEx;
 import com.sithtermfx.ui.input.FxMouseEvent;
 import com.sithtermfx.ui.input.FxMouseWheelEvent;
+import com.sithtermfx.ui.settings.BoldTextMode;
 import com.sithtermfx.ui.settings.ModifierKeys;
 import com.sithtermfx.ui.settings.MutableFontSizeProvider;
 import com.sithtermfx.ui.settings.SettingsProvider;
@@ -1010,6 +1011,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     private void doRepaint() {
         resetColorCache();
+        myBoldTextMode = Objects.requireNonNullElse(mySettingsProvider.getBoldTextMode(), BoldTextMode.BOLD_FONT);
         javafx.scene.paint.Color windowBackground = getBackground();
         myWindowBackgroundFx = windowBackground;
         // Clear to fully transparent before painting the background. For an opaque background the
@@ -1032,6 +1034,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
                         @Override
                         public void consume(int x, int y, @NotNull TextStyle style, @NotNull CharBuffer characters, int startRow) {
                             int row = y - startRow;
+                            style = applyBoldTextMode(style);
                             drawCharacters(x, row, style, characters, myFillCharacterBackgroundIncludingLineSpacing);
                             if (myFindResult != null && findResultHighlighted.get()) {
                                 List<Pair<Integer, Integer>> ranges = myFindResult.getRanges(characters);
@@ -1058,6 +1061,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
                         @Override
                         public void consumeNul(int x, int y, int nulIndex, TextStyle style, CharBuffer characters, int startRow) {
                             int row = y - startRow;
+                            style = applyBoldTextMode(style);
                             if (mySelection.get() != null) {
                                 // compute intersection with all NUL areas, non-breaking
                                 Pair<Integer, Integer> interval = mySelection.get()
@@ -1086,7 +1090,8 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
                 if (Character.isHighSurrogate(sc.getFirst())) {
                     cursorChar += myTerminalTextBuffer.getStyledCharAt(cursorX + 1, cursorY).getFirst();
                 }
-                TextStyle normalStyle = sc.getSecond() != null ? sc.getSecond() : myStyleState.getCurrent();
+                TextStyle normalStyle = applyBoldTextMode(
+                        sc.getSecond() != null ? sc.getSecond() : myStyleState.getCurrent());
                 TextStyle cursorStyle;
                 if (inSelection(cursorX, cursorY)) {
                     cursorStyle = getSelectionStyle(normalStyle);
@@ -1115,6 +1120,9 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             scrollBarThumbVisible = true;
         }
     }
+
+    /** How bold text is drawn, read from the settings at the start of every repaint. */
+    private @NotNull BoldTextMode myBoldTextMode = BoldTextMode.BOLD_FONT;
 
     private void resetColorCache() {
         myCachedSelectionColor = null;
@@ -1592,6 +1600,39 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         }
     }
 
+    private @NotNull TextStyle applyBoldTextMode(@NotNull TextStyle style) {
+        return myBoldTextMode.usesBrightColor() ? brightenBoldColor(style) : style;
+    }
+
+    /**
+     * Bold text whose foreground is one of the eight basic ANSI colours (palette indices 0-7) in the
+     * matching bright colour (8-15), as xterm's {@code boldColors}. Applied to the text's own style
+     * before inverse video, selection, search or link highlighting derive their styles from it. Of a
+     * link, the style of the text beneath it is brightened ({@link HyperlinkStyle#getUnderlyingStyle()})
+     * and the link is kept. Any other style is returned as it is.
+     */
+    static @NotNull TextStyle brightenBoldColor(@NotNull TextStyle style) {
+        TextStyle text = style instanceof HyperlinkStyle ? ((HyperlinkStyle) style).getUnderlyingStyle() : style;
+        if (!text.hasOption(Option.BOLD)) {
+            return style;
+        }
+        TerminalColor foreground = text.getForeground();
+        if (foreground == null || !foreground.isIndexed()) {
+            return style;
+        }
+        int index = foreground.getColorIndex();
+        if (index < 0 || index > 7) {
+            return style;
+        }
+        TextStyle.Builder builder = style.toBuilder();
+        builder.setForeground(TerminalColor.index(index + 8));
+        return builder.build();
+    }
+
+    private boolean isDrawnBold(@NotNull TextStyle style) {
+        return style.hasOption(Option.BOLD) && myBoldTextMode.usesBoldFont();
+    }
+
     /**
      * The style a link is drawn in when it is not highlighted: the text beneath it. That is the
      * original style a hyperlink filter kept, else the text style an OSC 8 link was started over (so
@@ -1619,7 +1660,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         // workaround to fix Swing bad rendering of bold special chars on Linux
         // TODO required for italic?
         CharBuffer renderingBuffer;
-        if (mySettingsProvider.DECCompatibilityMode() && style.hasOption(TextStyle.Option.BOLD)) {
+        if (mySettingsProvider.DECCompatibilityMode() && isDrawnBold(style)) {
             renderingBuffer = CharUtils.heavyDecCompatibleBuffer(buf);
         } else {
             renderingBuffer = buf;
@@ -1752,7 +1793,7 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     }
 
     protected @NotNull Font getFontToDisplay(char[] text, int start, int end, @NotNull TextStyle style) {
-        boolean bold = style.hasOption(TextStyle.Option.BOLD);
+        boolean bold = isDrawnBold(style);
         boolean italic = style.hasOption(TextStyle.Option.ITALIC);
         // workaround to fix Swing bad rendering of bold special chars on Linux
         if (bold && mySettingsProvider.DECCompatibilityMode() && CharacterSets.isDecBoxChar(text[start])) {

@@ -90,6 +90,18 @@ public interface UserSettingsProvider {
         return true;
     }
 
+    /**
+     * How text with the bold attribute is drawn: with a bold font (the default, as before), in the
+     * bright variant of a basic ANSI foreground colour (xterm's {@code boldColors}), or both. See
+     * {@link BoldTextMode}. The panel reads this on every repaint, so a change takes effect with the
+     * next one.
+     *
+     * @return the bold text mode, never {@code null}
+     */
+    default @NotNull BoldTextMode getBoldTextMode() {
+        return BoldTextMode.BOLD_FONT;
+    }
+
     default boolean enableTextBlinking() {
         return false;
     }
