@@ -6,11 +6,15 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import com.sithtermfx.ui.settings.SearchBarText;
+
+import java.util.Objects;
 
 final class FindComponent {
 
@@ -20,13 +24,22 @@ final class FindComponent {
 
     private final Label label = new Label();
 
-    private final CheckBox ignoreCaseCheckBox = new CheckBox("Ignore Case");
+    private final CheckBox ignoreCaseCheckBox;
+
+    private final SearchBarText text;
 
     public FindComponent(SithTermFxWidget jediTermWidget) {
+        this.text = Objects.requireNonNullElse(jediTermWidget.mySettingsProvider.getSearchBarText(),
+                SearchBarText.ENGLISH);
+        this.ignoreCaseCheckBox = new CheckBox(text.ignoreCase());
+        this.ignoreCaseCheckBox.setTooltip(new Tooltip(text.ignoreCaseTooltip()));
         this.ignoreCaseCheckBox.setSelected(true);
-        Button next = new Button("\u25BC");
+        this.textField.setPromptText(text.placeholder());
+        Button next = new Button(text.nextMatch());
+        next.setTooltip(new Tooltip(text.nextMatchTooltip()));
         next.setOnAction(e -> onResultUpdated(jediTermWidget.getTerminalPanel().selectNextFindResultItem()));
-        Button prev = new Button("\u25B2");
+        Button prev = new Button(text.previousMatch());
+        prev.setTooltip(new Tooltip(text.previousMatchTooltip()));
         prev.setOnAction(e -> onResultUpdated(jediTermWidget.getTerminalPanel().selectPrevFindResultItem()));
         var charSize = jediTermWidget.myTerminalPanel.myCharSize;
         HBox.setHgrow(textField, Priority.ALWAYS);
@@ -60,12 +73,23 @@ final class FindComponent {
     }
 
     private void updateLabel(@Nullable FindResult result) {
-        if (result == null) {
-            label.setText("");
-        } else if (!result.getItems().isEmpty()) {
-            FindResult.FindItem selectedItem = result.selectedItem();
-            label.setText(selectedItem.getIndex() + " of " + result.getItems().size());
+        label.setText(labelText(text, textField.getText(), result));
+    }
+
+    /**
+     * The counter beside the search field: empty while there is nothing to search for, "no matches"
+     * when the search text is not found (also after stepping through no results), else the number of
+     * the selected match and the number of matches.
+     */
+    static @NotNull String labelText(@NotNull SearchBarText text, @Nullable String pattern,
+                                     @Nullable FindResult result) {
+        if (pattern == null || pattern.isEmpty()) {
+            return "";
         }
+        if (result == null || result.getItems().isEmpty()) {
+            return text.noMatches();
+        }
+        return text.matchCounter(result.selectedItem().getIndex(), result.getItems().size());
     }
 
     void onResultUpdated(FindResult results) {

@@ -34,4 +34,16 @@ public interface SystemSettingsProvider {
 
     @NotNull
     TerminalActionPresentation getSelectAllActionPresentation();
+
+    /**
+     * The strings of the find bar: placeholder, check box, match counter, "no matches", buttons and
+     * tooltips. The default is {@link SearchBarText#ENGLISH}; an embedder that localizes its UI
+     * returns its own {@link SearchBarText}, overriding the strings it translates. The find bar reads
+     * this each time it is opened.
+     *
+     * @return the find bar strings, never {@code null}
+     */
+    default @NotNull SearchBarText getSearchBarText() {
+        return SearchBarText.ENGLISH;
+    }
 }
