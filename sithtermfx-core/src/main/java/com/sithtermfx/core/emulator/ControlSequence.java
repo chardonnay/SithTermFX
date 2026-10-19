@@ -16,6 +16,18 @@ public class ControlSequence {
      */
     private static final int MAX_PUSH_BACK_LENGTH = 1024;
 
+    /**
+     * Parameters beyond this many are dropped, as xterm drops those beyond its own (smaller) limit, so
+     * an unterminated run of {@code ;}-separated digits cannot grow {@link #myArgv} without bound.
+     */
+    static final int MAX_PARAMETERS = 256;
+
+    /** A parameter value is clamped to this, as in xterm, instead of overflowing {@code int}. */
+    static final int MAX_PARAMETER_VALUE = 65535;
+
+    /** {@link #getDebugInfo} shows at most this many chars of the raw sequence. */
+    private static final int MAX_DEBUG_LENGTH = 1024;
+
     private int myArgc;
 
     private int[] myArgv;
@@ -32,6 +44,8 @@ public class ControlSequence {
 
     private final StringBuilder mySequenceString = new StringBuilder();
 
+    private boolean mySequenceStringTruncated = false;
+
     ControlSequence(final TerminalDataStream channel) throws IOException {
         myArgv = new int[5];
         myArgc = 0;
@@ -44,9 +58,14 @@ public class ControlSequence {
         int digit = 0;
         int seenDigit = 0;
         int pos = -1;
+        boolean droppingParameters = false;
         while (true) {
             final char b = channel.getChar();
-            mySequenceString.append(b);
+            if (mySequenceString.length() < MAX_DEBUG_LENGTH) {
+                mySequenceString.append(b);
+            } else {
+                mySequenceStringTruncated = true;
+            }
             pos++;
             if (b == '!' && pos == 0) {
                 myStartsWithExclamationMark = true;
@@ -55,10 +74,14 @@ public class ControlSequence {
             } else if (b == '>' && pos == 0) {
                 myStartsWithMoreMark = true;
             } else if (b == ';') {
-                if (digit > 0) {
+                if (droppingParameters) {
+                    // The last parameter kept is complete; skip the rest up to the final char.
+                } else if (digit > 0 && myArgc == MAX_PARAMETERS - 1) {
+                    droppingParameters = true;
+                } else if (digit > 0) {
                     myArgc++;
                     if (myArgc == myArgv.length) {
-                        int[] replacement = new int[myArgv.length * 2];
+                        int[] replacement = new int[Math.min(myArgv.length * 2, MAX_PARAMETERS)];
                         System.arraycopy(myArgv, 0, replacement, 0, myArgv.length);
                         myArgv = replacement;
                     }
@@ -66,7 +89,9 @@ public class ControlSequence {
                     digit = 0;
                 }
             } else if ('0' <= b && b <= '9') {
-                myArgv[myArgc] = myArgv[myArgc] * 10 + b - '0';
+                if (!droppingParameters) {
+                    myArgv[myArgc] = Math.min(myArgv[myArgc] * 10 + b - '0', MAX_PARAMETER_VALUE);
+                }
                 digit++;
                 seenDigit = 1;
             } else if (':' <= b && b <= '?') {
@@ -196,6 +221,9 @@ public class ControlSequence {
         appendToBuffer(sb);
         sb.append(", raw: ESC[");
         sb.append(mySequenceString);
+        if (mySequenceStringTruncated) {
+            sb.append("...");
+        }
         return sb.toString();
     }
 }

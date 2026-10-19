@@ -76,6 +76,60 @@ public class ControlSequenceTest {
         assertEquals("after     \n          \n", session.getTerminalTextBuffer().getScreenLines());
     }
 
+    @Test
+    public void keepsAtMostMaxParameters() throws IOException {
+        ControlSequence sequence = parsed("7;".repeat(10_000) + "7m");
+
+        assertEquals(ControlSequence.MAX_PARAMETERS, sequence.getCount());
+        assertEquals(7, sequence.getArg(ControlSequence.MAX_PARAMETERS - 1, 0));
+        assertEquals('m', sequence.getFinalChar());
+    }
+
+    @Test
+    public void keepsParametersUpToTheLimitUnchanged() throws IOException {
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i < ControlSequence.MAX_PARAMETERS; i++) {
+            body.append(i).append(';');
+        }
+        ControlSequence sequence = parsed(body + "m");
+
+        assertEquals(ControlSequence.MAX_PARAMETERS, sequence.getCount());
+        for (int i = 0; i < ControlSequence.MAX_PARAMETERS; i++) {
+            assertEquals(i, sequence.getArg(i, -1));
+        }
+    }
+
+    @Test
+    public void clampsParameterValuesInsteadOfOverflowing() throws IOException {
+        ControlSequence sequence = parsed("99999999999999999999;65535;65536;12H");
+
+        assertEquals(4, sequence.getCount());
+        assertEquals(ControlSequence.MAX_PARAMETER_VALUE, sequence.getArg(0, 0));
+        assertEquals(65535, sequence.getArg(1, 0));
+        assertEquals(ControlSequence.MAX_PARAMETER_VALUE, sequence.getArg(2, 0));
+        assertEquals(12, sequence.getArg(3, 0));
+    }
+
+    @Test
+    public void pushesBackAClampedValueWithoutAMinusSign() throws IOException {
+        assertEquals("\b" + ESC + "[65535m", pushedBack("99999999999999999999\bm"));
+    }
+
+    @Test
+    public void boundsTheRawDebugCopy() throws IOException {
+        String debugInfo = parsed("1;".repeat(100_000) + "m").getDebugInfo();
+
+        assertTrue(debugInfo.length() < 4 * PUSH_BACK_LENGTH, "debug info is " + debugInfo.length() + " chars");
+        assertTrue(debugInfo.endsWith("..."), debugInfo);
+    }
+
+    private static ControlSequence parsed(String body) throws IOException {
+        ArrayTerminalDataStream stream = new ArrayTerminalDataStream(body.toCharArray());
+        ControlSequence sequence = new ControlSequence(stream);
+        assertTrue(stream.isEmpty());
+        return sequence;
+    }
+
     /** The chars a CSI body (everything after {@code ESC [}) is pushed back as. */
     private static String pushedBack(String body) throws IOException {
         ArrayTerminalDataStream stream = new ArrayTerminalDataStream(body.toCharArray());

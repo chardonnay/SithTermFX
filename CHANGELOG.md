@@ -5,6 +5,14 @@ All notable changes to SithTermFX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- A CSI sequence no longer grows memory without bound and no longer yields wrong parameters, whatever the remote side sends (follow-up to the 1.2.3 push-back fix, issue #5). At most 256 parameters are kept and the rest are dropped up to the final char; each value is clamped to 65535, as in xterm, instead of overflowing `int` (an overflowed value used to be re-emitted with a `-` on push-back); the raw copy kept for debug logging is capped at 1024 chars.
+
+---
+
 ## [1.2.4] - 2026-10-05
 
 ### Added
