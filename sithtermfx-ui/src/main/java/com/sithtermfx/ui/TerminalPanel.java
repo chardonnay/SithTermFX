@@ -33,6 +33,7 @@ import com.sithtermfx.core.typeahead.TerminalTypeAheadManager;
 import com.sithtermfx.core.util.CharUtils;
 import static com.sithtermfx.core.util.Platform.isMacOS;
 import static com.sithtermfx.core.util.Platform.isWindows;
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.ui.hyperlinks.LinkInfoEx;
 import com.sithtermfx.ui.input.FxMouseEvent;
@@ -163,7 +164,8 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     private int mySpaceBetweenLines = 0;
 
-    protected Dimension2D myCharSize;
+    /** Volatile: the emulator thread reads it for the cell size images are laid out with. */
+    protected volatile Dimension2D myCharSize;
 
     private TermSize myTermSize;
 
@@ -224,6 +226,20 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
      * the whole canvas once, and stacking further translucent fills on top would darken it.
      */
     private javafx.scene.paint.Color myWindowBackgroundFx;
+
+    /** Which part of a cell {@link #drawCharacters} draws: the text is drawn in two passes around images under it. */
+    private enum CellLayer {
+        ALL,
+        BACKGROUND,
+        TEXT
+    }
+
+    private CellLayer myCellLayer = CellLayer.ALL;
+
+    /** Whether the cells with the default background are left unpainted, for the images drawn under them. */
+    private boolean mySkipDefaultCellBackground;
+
+    private final TerminalImageRenderer myImageRenderer = new TerminalImageRenderer();
 
     private int myMaxFPS = 50;
 
@@ -1026,62 +1042,63 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
             // update myClientScrollOrigin as scrollArea might have been invoked after last WeakRedrawTimer action
             updateScrolling(false);
             clampScrollOrigin();
-            myTerminalTextBuffer.processHistoryAndScreenLines(swingClientScrollOrigin, myTermSize.getRows(),
-                    new StyledTextConsumer() {
+            myImageRenderer.collect(myTerminalTextBuffer, swingClientScrollOrigin, myTermSize.getRows());
+            StyledTextConsumer textConsumer = new StyledTextConsumer() {
 
-                        final int columnCount = getColumnCount();
+                final int columnCount = getColumnCount();
 
-                        @Override
-                        public void consume(int x, int y, @NotNull TextStyle style, @NotNull CharBuffer characters, int startRow) {
-                            int row = y - startRow;
-                            style = applyBoldTextMode(style);
-                            drawCharacters(x, row, style, characters, myFillCharacterBackgroundIncludingLineSpacing);
-                            if (myFindResult != null && findResultHighlighted.get()) {
-                                List<Pair<Integer, Integer>> ranges = myFindResult.getRanges(characters);
-                                if (ranges != null && !ranges.isEmpty()) {
-                                    TextStyle foundPatternStyle = getFoundPattern(style);
-                                    for (Pair<Integer, Integer> range : ranges) {
-                                        CharBuffer foundPatternChars = characters.subBuffer(range);
-                                        drawCharacters(x + range.getFirst(), row, foundPatternStyle, foundPatternChars);
-                                    }
-                                }
-                            }
-                            if (mySelection.get() != null) {
-                                Pair<Integer, Integer> interval = mySelection.get()
-                                        .intersect(x, row + swingClientScrollOrigin, characters.length());
-                                if (interval != null) {
-                                    TextStyle selectionStyle = getSelectionStyle(style);
-                                    CharBuffer selectionChars = characters.subBuffer(interval.getFirst() - x, interval.getSecond());
-
-                                    drawCharacters(interval.getFirst(), row, selectionStyle, selectionChars);
-                                }
+                @Override
+                public void consume(int x, int y, @NotNull TextStyle style, @NotNull CharBuffer characters, int startRow) {
+                    int row = y - startRow;
+                    style = applyBoldTextMode(style);
+                    drawCharacters(x, row, style, characters, myFillCharacterBackgroundIncludingLineSpacing);
+                    if (myFindResult != null && findResultHighlighted.get()) {
+                        List<Pair<Integer, Integer>> ranges = myFindResult.getRanges(characters);
+                        if (ranges != null && !ranges.isEmpty()) {
+                            TextStyle foundPatternStyle = getFoundPattern(style);
+                            for (Pair<Integer, Integer> range : ranges) {
+                                CharBuffer foundPatternChars = characters.subBuffer(range);
+                                drawCharacters(x + range.getFirst(), row, foundPatternStyle, foundPatternChars);
                             }
                         }
+                    }
+                    if (mySelection.get() != null) {
+                        Pair<Integer, Integer> interval = mySelection.get()
+                                .intersect(x, row + swingClientScrollOrigin, characters.length());
+                        if (interval != null) {
+                            TextStyle selectionStyle = getSelectionStyle(style);
+                            CharBuffer selectionChars = characters.subBuffer(interval.getFirst() - x, interval.getSecond());
 
-                        @Override
-                        public void consumeNul(int x, int y, int nulIndex, TextStyle style, CharBuffer characters, int startRow) {
-                            int row = y - startRow;
-                            style = applyBoldTextMode(style);
-                            if (mySelection.get() != null) {
-                                // compute intersection with all NUL areas, non-breaking
-                                Pair<Integer, Integer> interval = mySelection.get()
-                                        .intersect(nulIndex, row + swingClientScrollOrigin, columnCount - nulIndex);
-                                if (interval != null) {
-                                    TextStyle selectionStyle = getSelectionStyle(style);
-                                    drawCharacters(x, row, selectionStyle, characters);
-                                    return;
-                                }
-                            }
-                            drawCharacters(x, row, style, characters);
+                            drawCharacters(interval.getFirst(), row, selectionStyle, selectionChars);
                         }
+                    }
+                }
 
-                        @Override
-                        public void consumeQueue(int x, int y, int nulIndex, int startRow) {
-                            if (x < columnCount) {
-                                consumeNul(x, y, nulIndex, TextStyle.EMPTY, new CharBuffer(CharUtils.EMPTY_CHAR, columnCount - x), startRow);
-                            }
+                @Override
+                public void consumeNul(int x, int y, int nulIndex, TextStyle style, CharBuffer characters, int startRow) {
+                    int row = y - startRow;
+                    style = applyBoldTextMode(style);
+                    if (mySelection.get() != null) {
+                        // compute intersection with all NUL areas, non-breaking
+                        Pair<Integer, Integer> interval = mySelection.get()
+                                .intersect(nulIndex, row + swingClientScrollOrigin, columnCount - nulIndex);
+                        if (interval != null) {
+                            TextStyle selectionStyle = getSelectionStyle(style);
+                            drawCharacters(x, row, selectionStyle, characters);
+                            return;
                         }
-                    });
+                    }
+                    drawCharacters(x, row, style, characters);
+                }
+
+                @Override
+                public void consumeQueue(int x, int y, int nulIndex, int startRow) {
+                    if (x < columnCount) {
+                        consumeNul(x, y, nulIndex, TextStyle.EMPTY, new CharBuffer(CharUtils.EMPTY_CHAR, columnCount - x), startRow);
+                    }
+                }
+            };
+            drawTextAndImages(textConsumer);
             int cursorY = myCursor.getCoordY();
             if (cursorY < getRowCount() && !hasUncommittedChars()) {
                 int cursorX = myCursor.getCoordX();
@@ -1106,6 +1123,35 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         resetColorCache();
         drawInputMethodUncommitedChars();
         drawMargins(this.canvas.getWidth(), this.canvas.getHeight());
+    }
+
+    /**
+     * Draws the lines and the images placed with the kitty graphics protocol, the images by z-index: under the
+     * cell backgrounds, between the backgrounds and the text (the text is then drawn in two passes), or over the
+     * text. Cells with the default background are left to the window background beneath images under the text.
+     */
+    private void drawTextAndImages(@NotNull StyledTextConsumer textConsumer) {
+        double cellWidth = myCharSize.getWidth();
+        double cellHeight = myCharSize.getHeight();
+        try {
+            mySkipDefaultCellBackground = myImageRenderer.hasPlacements(TerminalImageRenderer.Layer.UNDER_BACKGROUND)
+                    || myImageRenderer.hasPlacements(TerminalImageRenderer.Layer.UNDER_TEXT);
+            myImageRenderer.draw(graphicsContext, TerminalImageRenderer.Layer.UNDER_BACKGROUND, cellWidth, cellHeight, getInsetX());
+            if (myImageRenderer.hasPlacements(TerminalImageRenderer.Layer.UNDER_TEXT)) {
+                myCellLayer = CellLayer.BACKGROUND;
+                myTerminalTextBuffer.processHistoryAndScreenLines(swingClientScrollOrigin, myTermSize.getRows(), textConsumer);
+                myImageRenderer.draw(graphicsContext, TerminalImageRenderer.Layer.UNDER_TEXT, cellWidth, cellHeight, getInsetX());
+                myCellLayer = CellLayer.TEXT;
+            }
+            myTerminalTextBuffer.processHistoryAndScreenLines(swingClientScrollOrigin, myTermSize.getRows(), textConsumer);
+            myCellLayer = CellLayer.ALL;
+            mySkipDefaultCellBackground = false;
+            myImageRenderer.draw(graphicsContext, TerminalImageRenderer.Layer.OVER_TEXT, cellWidth, cellHeight, getInsetX());
+        } finally {
+            myCellLayer = CellLayer.ALL;
+            mySkipDefaultCellBackground = false;
+            myImageRenderer.endFrame();
+        }
     }
 
     /**
@@ -1576,16 +1622,17 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
         javafx.scene.paint.Color backgroundColor = getEffectiveBackground(style);
         // doRepaint already painted the whole canvas with the window background. When that
         // background is translucent, repainting the same colour per cell would stack alpha and
-        // darken the terminal, so skip it. Opaque backgrounds keep the original behaviour.
+        // darken the terminal, so skip it; so too over an image drawn under the text.
+        // Opaque backgrounds otherwise keep the original behaviour.
         javafx.scene.paint.Color windowBackground = myWindowBackgroundFx;
-        boolean redundantTranslucentDefault = windowBackground != null
-                && windowBackground.getOpacity() < 1.0
+        boolean redundantDefault = windowBackground != null
+                && (windowBackground.getOpacity() < 1.0 || mySkipDefaultCellBackground)
                 && backgroundColor.equals(windowBackground);
-        if (!redundantTranslucentDefault) {
+        if (myCellLayer != CellLayer.TEXT && !redundantDefault) {
             graphicsContext.setFill(backgroundColor);
             graphicsContext.fillRect(xCoord, yCoord, width, height);
         }
-        if (buf.isNul()) {
+        if (myCellLayer == CellLayer.BACKGROUND || buf.isNul()) {
             return; // nothing more to do
         }
         var color = getStyleForeground(style);
@@ -1943,6 +1990,20 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     @Override
     public boolean ambiguousCharsAreDoubleWidth() {
         return mySettingsProvider.ambiguousCharsAreDoubleWidth();
+    }
+
+    @Override
+    public @Nullable PixelSize getCellPixelSize() {
+        Dimension2D charSize = myCharSize;
+        if (charSize == null) {
+            return null;
+        }
+        return new PixelSize((int) Math.round(charSize.getWidth()), (int) Math.round(charSize.getHeight()));
+    }
+
+    @Override
+    public boolean isKittyGraphicsEnabled() {
+        return mySettingsProvider.isKittyGraphicsEnabled();
     }
 
     @Override

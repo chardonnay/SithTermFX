@@ -2,6 +2,7 @@ package com.sithtermfx.core;
 
 import com.sithtermfx.core.input.KeyEvent;
 import com.sithtermfx.core.typeahead.TerminalTypeAheadManager;
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.emulator.Emulator;
 import com.sithtermfx.core.emulator.EmulatorFactory;
@@ -159,9 +160,14 @@ public class TerminalStarter implements TerminalOutputStream {
         long mergeDelay = myTerminal.getTerminalTextBuffer().isUsingAlternateBuffer() ?
                 100 /* not necessary, but let's avoid unnecessary work in case of a series of resize events */ :
                 500 /* hopefully, the process will send the screen buffer update within the delay */;
-        //noinspection CodeBlock2Expr
         myScheduledTtyConnectorResizeFuture = mySingleThreadScheduledExecutor.schedule(() -> {
-            myTtyConnector.resize(termSize);
+            PixelSize cell = myTerminal.getCellPixelSize();
+            if (cell != null) {
+                myTtyConnector.resize(termSize, new PixelSize(cell.getWidth() * termSize.getColumns(),
+                        cell.getHeight() * termSize.getRows()));
+            } else {
+                myTtyConnector.resize(termSize);
+            }
         }, mergeDelay, TimeUnit.MILLISECONDS);
     }
 

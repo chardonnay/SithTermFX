@@ -1,5 +1,6 @@
 package com.sithtermfx.core;
 
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import org.jetbrains.annotations.NotNull;
 
@@ -18,6 +19,16 @@ public interface TtyConnector {
     default void resize(@NotNull TermSize termSize) {
         // support old implementations not overriding this method
         resize(new java.awt.Dimension(termSize.getColumns(), termSize.getRows()));
+    }
+
+    /**
+     * Resizes the terminal and tells the size of its text area in pixels, which programs that draw images read
+     * (the {@code ws_xpixel} and {@code ws_ypixel} of {@code TIOCGWINSZ}, or the pixel size of an SSH window
+     * change). The terminal calls this instead of {@link #resize(TermSize)} when it knows its cell size; a
+     * connector that can pass the pixel size on overrides it, the default ignores the pixel size.
+     */
+    default void resize(@NotNull TermSize termSize, @NotNull PixelSize pixelSize) {
+        resize(termSize);
     }
 
     int waitFor() throws InterruptedException;

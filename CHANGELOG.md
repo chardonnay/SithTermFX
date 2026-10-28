@@ -5,6 +5,24 @@ All notable changes to SithTermFX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The kitty graphics protocol (https://sw.kovidgoyal.net/kitty/graphics-protocol/): programs such as `kitten icat`, yazi, ranger, timg, chafa and mpv `--vo=kitty` show images. Supported are transmitting, displaying, querying, placing a stored image and deleting (`a=t`, `T`, `q`, `p`, `d`, every `d` target); direct transmission in one piece or in chunks; RGB, RGBA and PNG (`f=24`, `32`, `100`), optionally zlib-compressed; image ids, image numbers and placement ids; the source rectangle, the offset in the first cell, the size in cells, the cursor policy and the z-index of a placement (images under the text, under non-default cell backgrounds, or over the text); responses with the quiet modes. Reading images from files or shared memory, animation, Unicode placeholders and relative placements are answered with `EINVAL`, so programs fall back. Programs detect the support with the usual query; `TERM` can stay `xterm-256color`.
+- Images belong to the line they were placed on: they scroll with the text into the scrollback, the alternate screen has its own, they stay with their char when a resize rewraps the line, and erasing text leaves them alone. `ED 2` moves them into the scrollback with the text, `ED 3` and `RIS` delete them. The decoded images of a terminal take at most 128 MiB (`KittyGraphicsProtocol.DEFAULT_STORAGE_QUOTA`) and number at most 4096 (`MAX_IMAGES`); images that no line shows any more are evicted first. A line holds at most 256 placements (`MAX_PLACEMENTS_PER_LINE`), and an image too large for the heap is answered with `ENOMEM` instead of ending the session.
+- `ESC _` (APC) is parsed: up to the same terminators as OSC and DCS, at most 1 MiB (`ApplicationProgramCommand.MAX_BODY_LENGTH`), a longer one is dropped whole. Before, the body of an APC was printed as text.
+- `CSI 14 t`, `CSI 16 t` and `CSI 18 t` report the size of the text area and of a cell in pixels and the size in characters.
+- `TtyConnector.resize(TermSize, PixelSize)` gets the size of the text area in pixels with every resize; its default calls `resize(TermSize)`. The demo application's `PtyProcessTtyConnector` passes it to the pty (`ws_xpixel`, `ws_ypixel`).
+- `UserSettingsProvider.isKittyGraphicsEnabled()` (default true) turns the protocol off; the terminal then neither acts on nor answers its commands. `TerminalDisplay.isKittyGraphicsEnabled()` and `getCellPixelSize()` let a display of an embedder's own take part; both default to no images.
+- `TerminalTextBuffer.processImagePlacements(...)`, `TerminalLine.getImagePlacements()` and the new package `com.sithtermfx.core.graphics` (`KittyGraphicsProtocol`, `KittyImage`, `ImagePlacement`) for embedders that render the buffer themselves; `SithTerminal.getKittyGraphics()` returns the stored images.
+
+### Changed
+
+- `TerminalPanel.myCharSize` is volatile, as the emulator thread reads the cell size.
+
+---
+
 ## [1.2.5] - 2026-10-19
 
 ### Security

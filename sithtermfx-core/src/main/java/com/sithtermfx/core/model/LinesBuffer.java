@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ObjIntConsumer;
 
 /**
  * Holds styled characters lines
@@ -239,7 +240,10 @@ public class LinesBuffer {
     public int removeBottomEmptyLines(int bottomMostLineInd, int maxCount) {
         int removedCount = 0;
         int ind = bottomMostLineInd;
-        while (removedCount < maxCount && ind >= 0 && (ind >= myLines.size() || myLines.get(ind).isNulOrEmpty())) {
+        // the rows an image covers are part of it, though they hold no text
+        int lastImageRow = lastImageRow(myLines);
+        while (removedCount < maxCount && ind >= 0 && ind > lastImageRow
+                && (ind >= myLines.size() || myLines.get(ind).isNulOrEmpty())) {
             if (ind < myLines.size()) {
                 myLines.remove(ind);
             }
@@ -251,6 +255,29 @@ public class LinesBuffer {
 
     int findLineIndex(@NotNull TerminalLine line) {
         return myLines.indexOf(line);
+    }
+
+    /**
+     * Passes every line to the action with its index, without adding lines as {@link #getLine(int)} does.
+     */
+    void forEachLine(@NotNull ObjIntConsumer<TerminalLine> action) {
+        for (int i = 0; i < myLines.size(); i++) {
+            action.accept(myLines.get(i), i);
+        }
+    }
+
+    /**
+     * @return the index of the last of the lines that an image anchored at one of them covers, or -1
+     */
+    static int lastImageRow(@NotNull List<TerminalLine> lines) {
+        int last = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            TerminalLine line = lines.get(i);
+            if (line.hasImagePlacements()) {
+                last = Math.max(last, i + line.getImageRows() - 1);
+            }
+        }
+        return last;
     }
 
     public void clearTypeAheadPredictions() {

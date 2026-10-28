@@ -1,5 +1,6 @@
 package com.sithtermfx.app.pty;
 
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.ProcessTtyConnector;
 import com.pty4j.PtyProcess;
@@ -29,6 +30,15 @@ public class PtyProcessTtyConnector extends ProcessTtyConnector {
     public void resize(@NotNull TermSize termSize) {
         if (isConnected()) {
             myProcess.setWinSize(new WinSize(termSize.getColumns(), termSize.getRows()));
+        }
+    }
+
+    @Override
+    public void resize(@NotNull TermSize termSize, @NotNull PixelSize pixelSize) {
+        if (isConnected()) {
+            // ws_xpixel and ws_ypixel are shorts
+            myProcess.setWinSize(new WinSize(termSize.getColumns(), termSize.getRows(),
+                    Math.min(pixelSize.getWidth(), Short.MAX_VALUE), Math.min(pixelSize.getHeight(), Short.MAX_VALUE)));
         }
     }
 

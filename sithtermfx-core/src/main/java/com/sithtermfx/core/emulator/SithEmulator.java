@@ -11,6 +11,7 @@ import com.sithtermfx.core.TerminalMode;
 import com.sithtermfx.core.CursorShape;
 import com.sithtermfx.core.Color;
 import com.sithtermfx.core.util.Ascii;
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.emulator.mouse.MouseFormat;
 import com.sithtermfx.core.emulator.mouse.MouseMode;
@@ -148,6 +149,9 @@ public class SithEmulator extends DataStreamIteratingEmulator {
             case ']': // Operating System Command (OSC)
                 processOsc();
                 break;
+            case '_': // Application Program Command (APC)
+                processApc();
+                break;
             case '6':
                 unsupported("Back Index (DECBI), VT420 and up");
                 break;
@@ -220,6 +224,25 @@ public class SithEmulator extends DataStreamIteratingEmulator {
             }
         } catch (Exception e) {
             logger.error("Error processing OSC (" + osc + ")", e);
+        }
+    }
+
+    private void processApc() throws IOException {
+        ApplicationProgramCommand apc = new ApplicationProgramCommand(myDataStream);
+        if (apc.isTruncated()) {
+            logger.debug("Dropped an APC longer than {} chars", ApplicationProgramCommand.MAX_BODY_LENGTH);
+            return;
+        }
+        String body = apc.getBody();
+        if (body.startsWith("G")) {
+            // kitty graphics protocol https://sw.kovidgoyal.net/kitty/graphics-protocol/
+            try {
+                myTerminal.processKittyGraphicsCommand(body.substring(1));
+            } catch (Exception e) {
+                logger.error("Error processing kitty graphics command (" + apc + ")", e);
+            }
+        } else if (logger.isDebugEnabled()) {
+            logger.debug("Ignored APC (" + apc + ")");
         }
     }
 
@@ -528,6 +551,13 @@ public class SithEmulator extends DataStreamIteratingEmulator {
                 }
                 myTerminal.resize(new TermSize(width, height), RequestOrigin.Remote);
                 return true;
+            case 14: // Report text area size in pixels: CSI 4 ; height ; width t
+            case 16: // Report character cell size in pixels: CSI 6 ; height ; width t
+                return reportPixelSize(args.getArg(0, -1) == 14);
+            case 18: // Report text area size in characters: CSI 8 ; height ; width t
+                myTerminal.deviceStatusReport(Ascii.ESC_CHAR + "[8;" + myTerminal.getTerminalHeight() + ";"
+                        + myTerminal.getTerminalWidth() + "t");
+                return true;
             case 22:
                 return csi22(args);
             case 23:
@@ -535,6 +565,22 @@ public class SithEmulator extends DataStreamIteratingEmulator {
             default:
                 return false;
         }
+    }
+
+    /**
+     * Answers {@code CSI 14 t} with the size of the text area or {@code CSI 16 t} with the size of a cell, in
+     * pixels, as programs that draw images ask for it. Not answered while the display does not know its cell size.
+     */
+    private boolean reportPixelSize(boolean textArea) {
+        PixelSize cell = myTerminal.getCellPixelSize();
+        if (cell == null) {
+            return false;
+        }
+        String response = textArea
+                ? "4;" + cell.getHeight() * myTerminal.getTerminalHeight() + ";" + cell.getWidth() * myTerminal.getTerminalWidth()
+                : "6;" + cell.getHeight() + ";" + cell.getWidth();
+        myTerminal.deviceStatusReport(Ascii.ESC_CHAR + "[" + response + "t");
+        return true;
     }
 
     private boolean csi22(ControlSequence args) { // TODO: support icon title

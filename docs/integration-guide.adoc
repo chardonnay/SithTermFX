@@ -1252,6 +1252,118 @@ To regenerate: `./docs/generate-diagrams.sh emulation-architecture`
 
 '''
 
+== 12. Images (Kitty Graphics Protocol)
+
+SithTermFX shows the images programs send with the
+https://sw.kovidgoyal.net/kitty/graphics-protocol/[kitty graphics protocol] — image viewers such as
+`kitten icat`, `timg` and `chafa`, file managers such as yazi and ranger, mpv's `--vo=kitty`, and
+libraries such as notcurses. *It is enabled by default* on every `SithTermFxWidget`; nothing needs to
+be registered.
+
+=== What Is Supported
+
+[cols="1,2",options="header"]
+|===
+| Part of the protocol | Support
+| Actions | Transmit (`a=t`), transmit and display (`a=T`), query (`a=q`), place a stored image (`a=p`), delete (`a=d`)
+| Transmission | Directly in the escape code (`t=d`), in one piece or in chunks (`m=1`)
+| Formats | 24-bit RGB (`f=24`), 32-bit RGBA (`f=32`), PNG (`f=100`), each optionally zlib-compressed (`o=z`)
+| Addressing | Image ids (`i`), image numbers (`I`), placement ids (`p`)
+| Placement | Source rectangle (`x`, `y`, `w`, `h`), offset in the first cell (`X`, `Y`), size in cells (`c`, `r`; with both the image is fit in and centred), cursor policy (`C`)
+| Stacking | `z` ≥ 0 over the text, `z` < 0 under the text, `z` < −1073741824 also under cells with a non-default background
+| Deleting | Every `d` target (`a`, `i`, `n`, `c`, `p`, `q`, `r`, `x`, `y`, `z`, `f`), lowercase keeps the image data, uppercase frees it
+| Responses | `OK` and errors as in kitty, quiet modes `q=1` and `q=2`
+|===
+
+Answered with an `EINVAL` error, so that a program can fall back: reading an image from a file, a temporary
+file or shared memory (`t=f`, `t=t`, `t=s`), animation (`a=f`, `a=a`, `a=c`), Unicode placeholders (`U=1`)
+and relative placements (`P`, `Q`). A program in an SSH session sends images directly anyway; a file path
+would name a file on the remote host.
+
+Programs find out whether the terminal supports the protocol by sending a query followed by a
+Primary Device Attributes request: SithTermFX answers the query first. `TERM` can stay `xterm-256color`.
+
+=== Images in the Buffer
+
+An image is anchored at the line that held the cursor when it was placed, so it behaves like the text on
+that line:
+
+* it scrolls with the text, moves into the scrollback and is gone when the line leaves the scrollback;
+* the alternate screen (`?1049h`) has its own images, and those of the main screen are back when it ends;
+* when the terminal gets narrower or wider, it stays with the char it was placed at as the line is rewrapped;
+* overwriting or erasing text leaves it alone. `ED 2` (`clear`) moves it into the scrollback with the text,
+  `ED 3` and a full reset (`RIS`) delete it.
+
+After a placement the cursor moves right by the image's columns and down to its last row, and the screen
+scrolls when that passes the bottom margin, as in kitty. An image keeps its size in cells when the font size
+changes.
+
+The decoded images of one terminal take at most `KittyGraphicsProtocol.DEFAULT_STORAGE_QUOTA`
+(128 MiB, 4 bytes per pixel), and there are at most `MAX_IMAGES` (4096) of them; an image is at most
+`MAX_IMAGE_DIMENSION` (10000) pixels wide and high. When a new image does not fit, the images no line
+shows any more are deleted first, then the oldest ones. A line holds at most `MAX_PLACEMENTS_PER_LINE`
+(256) placements. Only the images on screen are also kept as JavaFX images.
+
+=== Window Size in Pixels
+
+Programs compute how large to make an image from the size of the text area in pixels. They read it
+from the window size of the pty (`ws_xpixel` and `ws_ypixel` of `TIOCGWINSZ`) or ask for it with
+`CSI 14 t` (text area) and `CSI 16 t` (cell); SithTermFX answers both, and `CSI 18 t` (size in
+characters).
+
+The terminal tells the pixel size to the `TtyConnector` through `resize(TermSize, PixelSize)`. Its
+default calls `resize(TermSize)` and drops the pixel size, so override it in a connector that can pass it
+on. For an SSH shell channel (Apache MINA SSHD):
+
+[source,java]
+----
+import com.sithtermfx.core.util.PixelSize;
+
+@Override
+public void resize(@NotNull TermSize termSize, @NotNull PixelSize pixelSize) {
+    try {
+        channel.sendWindowChange(termSize.getColumns(), termSize.getRows(),
+                pixelSize.getHeight(), pixelSize.getWidth());
+    } catch (IOException e) {
+        // log warning
+    }
+}
+----
+
+`PtyProcessTtyConnector` of the demo application passes it to pty4j in the same way.
+
+=== Turning It Off
+
+Override `isKittyGraphicsEnabled()` in your settings provider. The terminal then ignores the commands and
+does not answer them, so programs behave as in a terminal without image support:
+
+[source,java]
+----
+@Override
+public boolean isKittyGraphicsEnabled() {
+    return false;
+}
+----
+
+A `TerminalDisplay` of your own (for a headless terminal) shows no images unless it overrides
+`isKittyGraphicsEnabled()` and `getCellPixelSize()`.
+
+=== Drawing the Images Yourself
+
+Embedders that render the buffer themselves (recordings, screenshots) find the images in the model:
+`TerminalTextBuffer.processImagePlacements(scrollOrigin, rowCount, consumer)` passes each
+`ImagePlacement` that shows in a window of rows, with the row of its line; `TerminalLine.getImagePlacements()`
+returns those of one line. A placement gives the source rectangle of its `KittyImage` and where to draw it,
+in cells relative to its top left cell; `KittyImage.getPixels()` returns non-premultiplied ARGB.
+
+=== tmux
+
+tmux passes the escape codes on only with `set -g allow-passthrough on`, and it does not know where an
+image is, so programs inside tmux mostly use Unicode placeholders, which SithTermFX does not support yet;
+they then fall back to text output.
+
+'''
+
 == Running the Built-in Examples
 
 SithTermFX ships with ready-to-run examples:

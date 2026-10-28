@@ -106,6 +106,18 @@ public interface UserSettingsProvider {
         return false;
     }
 
+    /**
+     * Whether programs may show images with the kitty graphics protocol (for example {@code kitten icat},
+     * yazi, ranger, timg, chafa or mpv's {@code --vo=kitty}). When this returns false the terminal ignores those
+     * commands and does not answer them, so programs fall back as in a terminal without image support. Read
+     * whenever a command arrives.
+     *
+     * @return true by default
+     */
+    default boolean isKittyGraphicsEnabled() {
+        return true;
+    }
+
     default int slowTextBlinkMs() {
         return 1000;
     }

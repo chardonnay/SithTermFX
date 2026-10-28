@@ -22,6 +22,7 @@ The following packages are considered public and stable within a major version:
 * `com.sithtermfx.core.emulator.tvi` — TeleVideo 910/920/925 terminal emulators
 * `com.sithtermfx.core.emulator.hp` — HP 2392 and HP 700/92 terminal emulators
 * `com.sithtermfx.core.emulator.petscii` — Commodore PETSCII terminal emulator
+* `com.sithtermfx.core.graphics` — Kitty graphics protocol (`KittyGraphicsProtocol`, `KittyImage`, `ImagePlacement`)
 * `com.sithtermfx.core.typeahead` — Type-ahead prediction
 * `com.sithtermfx.ui` — JavaFX terminal widget
 * `com.sithtermfx.ui.settings` — Settings and theming
@@ -41,6 +42,9 @@ The following packages are considered public and stable within a major version:
 * *Link click policy* via `UserSettingsProvider.isFollowLinkGesture(com.sithtermfx.ui.settings.ModifierKeys)`
 * *Bold text in bright colours* via `UserSettingsProvider.getBoldTextMode()` returning `com.sithtermfx.ui.settings.BoldTextMode`
 * *Find bar strings* (localization) via `SystemSettingsProvider.getSearchBarText()` returning `com.sithtermfx.ui.settings.SearchBarText`
+* *Kitty graphics protocol* on or off via `UserSettingsProvider.isKittyGraphicsEnabled()` (default on)
+* *Window size in pixels* for programs that draw images via `TtyConnector.resize(TermSize, com.sithtermfx.core.util.PixelSize)`
+* *Image placements* for custom rendering via `TerminalTextBuffer.processImagePlacements(...)` and `TerminalLine.getImagePlacements()`
 
 == Emulation Types
 

@@ -1,6 +1,7 @@
 package com.sithtermfx.core;
 
 import com.sithtermfx.core.util.CellPosition;
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.emulator.mouse.MouseFormat;
 import com.sithtermfx.core.emulator.mouse.MouseMode;
@@ -192,5 +193,20 @@ public interface Terminal {
     }
 
     default void processCustomCommand(@NotNull List<String> args) {
+    }
+
+    /**
+     * Executes a command of the kitty graphics protocol.
+     *
+     * @param command the body of {@code ESC _ G ... ESC \}, after the {@code G}
+     */
+    default void processKittyGraphicsCommand(@NotNull String command) {
+    }
+
+    /**
+     * @return the size of one character cell in pixels, or null when it is not known
+     */
+    default @Nullable PixelSize getCellPixelSize() {
+        return null;
     }
 }

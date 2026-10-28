@@ -1,5 +1,6 @@
 package com.sithtermfx.core;
 
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.emulator.mouse.MouseFormat;
 import com.sithtermfx.core.emulator.mouse.MouseMode;
@@ -49,5 +50,21 @@ public interface TerminalDisplay {
 
     default @Nullable Color getWindowBackground() {
         return null;
+    }
+
+    /**
+     * @return the size of one character cell in pixels, or null for a display that does not know it. Programs
+     * that draw images read it, from the window size or by asking ({@code CSI 14 t}, {@code CSI 16 t}).
+     */
+    default @Nullable PixelSize getCellPixelSize() {
+        return null;
+    }
+
+    /**
+     * @return whether the display draws the images programs send with the kitty graphics protocol. While it
+     * does not, the terminal ignores those commands and does not answer them, so programs see no support.
+     */
+    default boolean isKittyGraphicsEnabled() {
+        return false;
     }
 }
