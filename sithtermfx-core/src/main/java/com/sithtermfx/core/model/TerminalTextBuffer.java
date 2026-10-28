@@ -5,6 +5,9 @@ import com.sithtermfx.core.util.CellPosition;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.StyledTextConsumer;
 import com.sithtermfx.core.TextStyle;
+import com.sithtermfx.core.graphics.ImagePlacement;
+import com.sithtermfx.core.graphics.KittyGraphicsProtocol;
+import com.sithtermfx.core.graphics.KittyImage;
 import com.sithtermfx.core.model.TerminalLine.TextEntry;
 import com.sithtermfx.core.model.hyperlinks.TextProcessing;
 import com.sithtermfx.core.util.CharUtils;
@@ -13,8 +16,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.ObjIntConsumer;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -63,6 +70,9 @@ public class TerminalTextBuffer {
 
     @Nullable
     private final TextProcessing myTextProcessing;
+
+    /** The most rows an image placement ever covered: how far above a window an image may start that shows in it. */
+    private int myMaxImageRows;
 
     public TerminalTextBuffer(final int width, final int height, @NotNull StyleState styleState) {
         this(width, height, styleState, null);
@@ -520,6 +530,91 @@ public class TerminalTextBuffer {
         myScreenBuffer.clearTypeAheadPredictions();
         myHistoryBuffer.clearTypeAheadPredictions();
         fireModelChangeEvent();
+    }
+
+    /**
+     * Passes the image placements that show in a window of rows to the consumer, with the row of the line that
+     * holds each one, counted from the top of the window. That row is negative for a placement whose line is
+     * above the window but which reaches into it. Call it with the buffer locked.
+     *
+     * @param scrollOrigin the row where the window starts, in the range [-history_lines_count, 0]
+     */
+    public void processImagePlacements(int scrollOrigin, int rowCount, @NotNull ObjIntConsumer<ImagePlacement> consumer) {
+        int historyLineCount = myHistoryBuffer.getLineCount();
+        int first = Math.max(scrollOrigin - Math.max(0, myMaxImageRows - 1), -historyLineCount);
+        int last = Math.min(scrollOrigin + rowCount, myScreenBuffer.getLineCount()) - 1;
+        for (int y = first; y <= last; y++) {
+            TerminalLine line = y < 0 ? myHistoryBuffer.getLine(historyLineCount + y) : myScreenBuffer.getLine(y);
+            if (!line.hasImagePlacements()) {
+                continue;
+            }
+            int row = y - scrollOrigin;
+            for (ImagePlacement placement : line.getImagePlacements()) {
+                if (row + placement.getRows() > 0) {
+                    consumer.accept(placement, row);
+                }
+            }
+        }
+    }
+
+    void addImagePlacement(int y, @NotNull ImagePlacement placement) {
+        getLine(y).addImagePlacement(placement);
+        myMaxImageRows = Math.max(myMaxImageRows, placement.getRows());
+        fireModelChangeEvent();
+    }
+
+    /**
+     * Removes the image placements the filter accepts from the screen lines and, unless {@code screenOnly}, also
+     * from the history and from the main screen behind the alternate one.
+     *
+     * @return the removed placements
+     */
+    @NotNull List<ImagePlacement> removeImagePlacements(boolean screenOnly,
+                                                        @NotNull KittyGraphicsProtocol.PlacementFilter filter) {
+        List<ImagePlacement> removed = new ArrayList<>();
+        myScreenBuffer.forEachLine((line, y) -> removeImagePlacements(line, y, filter, removed));
+        if (!screenOnly) {
+            int historyLineCount = myHistoryBuffer.getLineCount();
+            myHistoryBuffer.forEachLine((line, y) -> removeImagePlacements(line, y - historyLineCount, filter, removed));
+            if (myUsingAlternateBuffer) {
+                myScreenBufferBackup.forEachLine((line, y) -> removeImagePlacements(line, Integer.MIN_VALUE, filter, removed));
+                myHistoryBufferBackup.forEachLine((line, y) -> removeImagePlacements(line, Integer.MIN_VALUE, filter, removed));
+            }
+        }
+        if (!removed.isEmpty()) {
+            fireModelChangeEvent();
+        }
+        return removed;
+    }
+
+    private static void removeImagePlacements(@NotNull TerminalLine line, int row,
+                                              @NotNull KittyGraphicsProtocol.PlacementFilter filter,
+                                              @NotNull List<ImagePlacement> removed) {
+        if (line.hasImagePlacements()) {
+            removed.addAll(line.removeImagePlacements(placement -> filter.accept(placement, row)));
+        }
+    }
+
+    /**
+     * @return the images that a line of the screen, the history or the main screen behind the alternate one
+     * holds a placement of
+     */
+    @NotNull Set<KittyImage> getPlacedImages() {
+        Set<KittyImage> images = new HashSet<>();
+        ObjIntConsumer<TerminalLine> collect = (line, y) -> {
+            if (line.hasImagePlacements()) {
+                for (ImagePlacement placement : line.getImagePlacements()) {
+                    images.add(placement.getImage());
+                }
+            }
+        };
+        myScreenBuffer.forEachLine(collect);
+        myHistoryBuffer.forEachLine(collect);
+        if (myUsingAlternateBuffer) {
+            myScreenBufferBackup.forEachLine(collect);
+            myHistoryBufferBackup.forEachLine(collect);
+        }
+        return images;
     }
 
     @Nullable

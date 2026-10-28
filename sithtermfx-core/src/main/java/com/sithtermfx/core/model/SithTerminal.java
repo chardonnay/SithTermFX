@@ -19,9 +19,13 @@ import com.sithtermfx.core.Color;
 import com.sithtermfx.core.util.Platform;
 import com.sithtermfx.core.TerminalCoordinates;
 import com.sithtermfx.core.compatibility.Point;
+import com.sithtermfx.core.graphics.ImagePlacement;
+import com.sithtermfx.core.graphics.KittyGraphicsProtocol;
+import com.sithtermfx.core.graphics.KittyImage;
 import com.sithtermfx.core.input.MouseEvent;
 import com.sithtermfx.core.input.MouseWheelEvent;
 import com.sithtermfx.core.util.CellPosition;
+import com.sithtermfx.core.util.PixelSize;
 import com.sithtermfx.core.util.TermSize;
 import com.sithtermfx.core.emulator.charset.CharacterSet;
 import com.sithtermfx.core.emulator.charset.GraphicSet;
@@ -98,6 +102,11 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
     private final List<TerminalApplicationTitleListener> myApplicationTitleListeners = new CopyOnWriteArrayList<>();
 
     private final List<TerminalResizeListener> myTerminalResizeListeners = new CopyOnWriteArrayList<>();
+
+    /** The cell size images are laid out with when the display does not tell its own. */
+    private static final PixelSize DEFAULT_CELL_PIXEL_SIZE = new PixelSize(10, 20);
+
+    private final KittyGraphicsProtocol myKittyGraphics = new KittyGraphicsProtocol(new KittyGraphicsHost());
 
     public SithTerminal(@NotNull TerminalDisplay display, @NotNull TerminalTextBuffer buf,
                         @NotNull StyleState initialStyleState) {
@@ -359,6 +368,25 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
     }
 
     @Override
+    public void processKittyGraphicsCommand(@NotNull String command) {
+        if (myDisplay.isKittyGraphicsEnabled()) {
+            myKittyGraphics.handle(command);
+        }
+    }
+
+    @Override
+    public @Nullable PixelSize getCellPixelSize() {
+        return myDisplay.getCellPixelSize();
+    }
+
+    /**
+     * @return the images programs sent with the kitty graphics protocol and how they are kept
+     */
+    public @NotNull KittyGraphicsProtocol getKittyGraphics() {
+        return myKittyGraphics;
+    }
+
+    @Override
     public void backspace() {
         myCursorX -= 1;
         if (myCursorX < 0) {
@@ -429,6 +457,8 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
                     beginY = 0;
                     endY = myTerminalHeight - 1;
                     myTerminalTextBuffer.clearHistory();
+                    // the images go with the scrollback, those on the screen included (kitty does the same)
+                    myTerminalTextBuffer.removeImagePlacements(true, (placement, row) -> true);
                     break;
                 default:
                     logger.warn("Unsupported erase in display mode:" + arg);
@@ -835,6 +865,7 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
         useAlternateBuffer(false);
         if (clearScrollBackBuffer) {
             myTerminalTextBuffer.clearScreenAndHistoryBuffers();
+            myKittyGraphics.reset();
         } else {
             myTerminalTextBuffer.clearScreenBuffer();
         }
@@ -1233,6 +1264,83 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
     @Override
     public StyleState getStyleState() {
         return myStyleState;
+    }
+
+    /**
+     * Lets the kitty graphics protocol anchor images at the lines of this terminal and move its cursor.
+     */
+    private final class KittyGraphicsHost implements KittyGraphicsProtocol.Host {
+
+        @Override
+        public @NotNull PixelSize getCellPixelSize() {
+            PixelSize size = myDisplay.getCellPixelSize();
+            return size != null && size.getWidth() > 0 && size.getHeight() > 0 ? size : DEFAULT_CELL_PIXEL_SIZE;
+        }
+
+        @Override
+        public int getCursorColumn() {
+            // past the last column while a wrap is pending
+            return Math.min(myCursorX, myTerminalWidth - 1);
+        }
+
+        @Override
+        public int getCursorRow() {
+            return myCursorY - 1;
+        }
+
+        @Override
+        public void placeAtCursor(@NotNull ImagePlacement placement, boolean moveCursor) {
+            myTerminalTextBuffer.modify(() -> {
+                myTerminalTextBuffer.addImagePlacement(myCursorY - 1, placement);
+                if (!moveCursor) {
+                    return;
+                }
+                // As kitty does: right by the columns, down to the last row of the image, and to the next line
+                // when that passes the right edge.
+                boolean inScrollingRegion = myCursorY <= myScrollRegionBottom;
+                myCursorX += placement.getColumns();
+                myCursorY += placement.getRows() - 1;
+                if (myCursorX >= myTerminalWidth) {
+                    myCursorX = 0;
+                    myCursorY += 1;
+                }
+                if (inScrollingRegion && myCursorY > myScrollRegionBottom) {
+                    // scroll the image into view, as far as the region allows
+                    int count = Math.min(myCursorY - myScrollRegionBottom, scrollingRegionSize());
+                    scrollArea(myScrollRegionTop, scrollingRegionSize(), -count);
+                    myCursorY = myScrollRegionBottom;
+                }
+                myCursorY = Math.min(myCursorY, myTerminalHeight);
+                myCursorYChanged = true;
+                myDisplay.setCursor(myCursorX, myCursorY);
+            });
+        }
+
+        @Override
+        public @NotNull List<ImagePlacement> removePlacements(boolean screenOnly,
+                                                              @NotNull KittyGraphicsProtocol.PlacementFilter filter) {
+            myTerminalTextBuffer.lock();
+            try {
+                return myTerminalTextBuffer.removeImagePlacements(screenOnly, filter);
+            } finally {
+                myTerminalTextBuffer.unlock();
+            }
+        }
+
+        @Override
+        public @NotNull Set<KittyImage> getPlacedImages() {
+            myTerminalTextBuffer.lock();
+            try {
+                return myTerminalTextBuffer.getPlacedImages();
+            } finally {
+                myTerminalTextBuffer.unlock();
+            }
+        }
+
+        @Override
+        public void sendResponse(@NotNull String response) {
+            deviceStatusReport(response);
+        }
     }
 
     private static class DefaultTabulator implements Tabulator {

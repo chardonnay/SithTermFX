@@ -2,6 +2,8 @@ package com.sithtermfx.core.model;
 
 import com.sithtermfx.core.StyledTextConsumer;
 import com.sithtermfx.core.TextStyle;
+import com.sithtermfx.core.graphics.ImagePlacement;
+import com.sithtermfx.core.graphics.KittyGraphicsProtocol;
 import com.sithtermfx.core.util.CharUtils;
 import kotlin.Pair;
 import org.jetbrains.annotations.NotNull;
@@ -11,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +30,9 @@ public final class TerminalLine {
     private final List<TerminalLineIntervalHighlighting> myCustomHighlightings = new CopyOnWriteArrayList<>();
 
     private TerminalLine myTypeAheadLine;
+
+    /** The images anchored at this line, null while there are none (the usual case). */
+    private @Nullable List<ImagePlacement> myImagePlacements;
 
     public TerminalLine() {
     }
@@ -357,6 +363,58 @@ public final class TerminalLine {
 
     void appendEntry(@NotNull TextEntry entry) {
         myTextEntries.add(entry);
+    }
+
+    /**
+     * @return the images anchored at this line (kitty graphics protocol), in the order they were placed. Erasing
+     * or overwriting the text does not remove them; they go with the line.
+     */
+    public @NotNull List<ImagePlacement> getImagePlacements() {
+        List<ImagePlacement> placements = myImagePlacements;
+        return placements != null ? Collections.unmodifiableList(placements) : Collections.emptyList();
+    }
+
+    public boolean hasImagePlacements() {
+        return myImagePlacements != null;
+    }
+
+    /**
+     * @return how many rows the images anchored at this line cover, starting with this line; 0 for none
+     */
+    int getImageRows() {
+        int rows = 0;
+        if (myImagePlacements != null) {
+            for (ImagePlacement placement : myImagePlacements) {
+                rows = Math.max(rows, placement.getRows());
+            }
+        }
+        return rows;
+    }
+
+    void addImagePlacement(@NotNull ImagePlacement placement) {
+        if (myImagePlacements == null) {
+            myImagePlacements = new ArrayList<>(1);
+        } else if (myImagePlacements.size() >= KittyGraphicsProtocol.MAX_PLACEMENTS_PER_LINE) {
+            // a program placing without moving the cursor (C=1) would otherwise pile up placements without end
+            myImagePlacements.remove(0);
+        }
+        myImagePlacements.add(placement);
+    }
+
+    /**
+     * @return the removed placements, those the filter accepts
+     */
+    @NotNull List<ImagePlacement> removeImagePlacements(@NotNull Predicate<ImagePlacement> filter) {
+        List<ImagePlacement> placements = myImagePlacements;
+        if (placements == null) {
+            return Collections.emptyList();
+        }
+        List<ImagePlacement> removed = new ArrayList<>();
+        placements.removeIf(placement -> filter.test(placement) && removed.add(placement));
+        if (placements.isEmpty()) {
+            myImagePlacements = null;
+        }
+        return removed;
     }
 
     @SuppressWarnings("unused") // used by IntelliJ

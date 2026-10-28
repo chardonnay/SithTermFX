@@ -21,6 +21,7 @@ toc::[]
 * Copy/Paste
 * Mouse support
 * *Clickable hyperlinks* — OSC 8 explicit hyperlinks (including local `file://` links from tools like `ls --hyperlink`) plus optional automatic URL detection
+* *Images* — the kitty graphics protocol, for `kitten icat`, yazi, ranger, timg, chafa, mpv `--vo=kitty` and others
 * Terminal resizing from client or server side
 * Terminal tabs
 * *Dynamic font size* — Adjust font size at runtime via Ctrl+Plus/Minus (Cmd+Plus/Minus on Mac) without disconnecting
@@ -185,6 +186,17 @@ Now let's clarify the difference between the two types of colors.
 Thus, links can use either custom colors or the original text colors.
 
 See the link:docs/integration-guide.adoc#_hyperlinks[Integration Guide § Hyperlinks] for setup, OSC 8 customization, and security details.
+
+=== Images
+
+Programs show images with the https://sw.kovidgoyal.net/kitty/graphics-protocol/[kitty graphics protocol]; this works out of the box.
+Images are sent in the escape code as PNG, RGB or RGBA, optionally zlib-compressed and in chunks, and can be placed, scaled, cropped, stacked under or over the text, and deleted.
+They scroll with the text into the scrollback and stay with their line when the terminal is resized.
+Reading images from files or shared memory, animation, Unicode placeholders and relative placements are not supported; programs get an error and fall back.
+
+Programs size images from the window size in pixels: override `TtyConnector.resize(TermSize, PixelSize)` to pass it on (the terminal also answers `CSI 14 t` and `CSI 16 t`).
+`isKittyGraphicsEnabled()` in `UserSettingsProvider` turns the protocol off.
+See the link:docs/integration-guide.adoc[Integration Guide § Images] for details.
 
 == Public API
 

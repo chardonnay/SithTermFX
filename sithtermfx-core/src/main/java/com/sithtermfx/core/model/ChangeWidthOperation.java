@@ -1,6 +1,7 @@
 package com.sithtermfx.core.model;
 
 import com.sithtermfx.core.compatibility.Point;
+import com.sithtermfx.core.graphics.ImagePlacement;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -123,7 +124,8 @@ class ChangeWidthOperation {
 
     private int getEmptyBottomLineCount() {
         int ind = myAllLines.size() - 1;
-        while (ind >= 0 && myAllLines.get(ind).isNulOrEmpty()) {
+        int lastImageRow = LinesBuffer.lastImageRow(myAllLines);
+        while (ind >= 0 && ind > lastImageRow && myAllLines.get(ind).isNulOrEmpty()) {
             ind--;
         }
         return myAllLines.size() - 1 - ind;
@@ -149,9 +151,16 @@ class ChangeWidthOperation {
                 myCurrentLine = null;
                 myCurrentLineLength = 0;
             }
-            myAllLines.add(TerminalLine.createEmpty());
+            TerminalLine emptyLine = TerminalLine.createEmpty();
+            myAllLines.add(emptyLine);
+            for (ImagePlacement placement : line.getImagePlacements()) {
+                emptyLine.addImagePlacement(placement.withColumn(Math.min(placement.getColumn(), myNewWidth - 1)));
+            }
             return;
         }
+        // where the first char of the line goes
+        int startIndex = myCurrentLine != null ? myAllLines.size() - 1 : myAllLines.size();
+        int startOffset = myCurrentLine != null ? myCurrentLineLength : 0;
         line.forEachEntry(entry -> {
             if (entry.isNul()) {
                 return;
@@ -175,9 +184,29 @@ class ChangeWidthOperation {
                 entryProcessedLength += len;
             }
         });
+        moveImagePlacements(line, startIndex, startOffset);
         if (!line.isWrapped()) {
             myCurrentLine = null;
             myCurrentLineLength = 0;
+        }
+    }
+
+    /**
+     * Anchors the images of a rewrapped line where the char at their column went. An image right of the text
+     * goes to the last line the text was wrapped into, as there is no char to follow.
+     */
+    private void moveImagePlacements(@NotNull TerminalLine line, int startIndex, int startOffset) {
+        for (ImagePlacement placement : line.getImagePlacements()) {
+            int offset = startOffset + placement.getColumn();
+            int index = startIndex + offset / myNewWidth;
+            int column = offset % myNewWidth;
+            if (index > myAllLines.size() - 1) {
+                index = myAllLines.size() - 1;
+                column = Math.min(placement.getColumn(), myNewWidth - 1);
+            }
+            if (index >= 0) {
+                myAllLines.get(index).addImagePlacement(placement.withColumn(column));
+            }
         }
     }
 
