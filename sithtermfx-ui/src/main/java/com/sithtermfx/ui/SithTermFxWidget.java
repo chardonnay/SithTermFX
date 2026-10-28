@@ -109,6 +109,8 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
                 settingsProvider.getHyperlinkHighlightingMode());
         TerminalTextBuffer terminalTextBuffer = new TerminalTextBuffer(columns, lines, styleState,
                 settingsProvider.getBufferMaxLinesCount(), myTextProcessing);
+        terminalTextBuffer.setHistoryMemoryLimit(settingsProvider.getBufferMaxMemoryBytes());
+        terminalTextBuffer.setScrollbackCompressionEnabled(settingsProvider.isScrollbackCompressionEnabled());
         myTextProcessing.setTerminalTextBuffer(terminalTextBuffer);
         // OSC 8 hyperlinks work out of the box; embedders may override via setLinkInfoProvider.
         myTextProcessing.setLinkInfoProvider(new DefaultOsc8LinkInfoProvider());
@@ -335,6 +337,7 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
             myTerminalStarter.close();
         }
         myTerminalPanel.dispose();
+        getTerminalTextBuffer().setScrollbackCompressionEnabled(false);
         getExecutorServiceManager().shutdownWhenAllExecuted();
     }
 

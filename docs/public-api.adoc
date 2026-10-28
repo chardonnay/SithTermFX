@@ -45,6 +45,7 @@ The following packages are considered public and stable within a major version:
 * *Kitty graphics protocol* on or off via `UserSettingsProvider.isKittyGraphicsEnabled()` (default on)
 * *Window size in pixels* for programs that draw images via `TtyConnector.resize(TermSize, com.sithtermfx.core.util.PixelSize)`
 * *Image placements* for custom rendering via `TerminalTextBuffer.processImagePlacements(...)` and `TerminalLine.getImagePlacements()`
+* *Scrollback memory limit and compression* via `UserSettingsProvider.getBufferMaxMemoryBytes()` and `isScrollbackCompressionEnabled()`, changed at runtime with `TerminalTextBuffer.setHistoryMemoryLimit(long)` and `setScrollbackCompressionEnabled(boolean)`
 
 == Emulation Types
 

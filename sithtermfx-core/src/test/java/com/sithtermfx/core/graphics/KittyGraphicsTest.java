@@ -545,6 +545,30 @@ public class KittyGraphicsTest {
     }
 
     @Test
+    public void anImageStaysWithItsLineWhenTheScrollbackIsCompressed() throws IOException {
+        process("text" + image("a=T,i=7,q=2,C=1", 10, 20) + "\r\n".repeat(40));
+        TerminalLine line = myBuffer.getLine(-myBuffer.getHistoryLinesCount());
+        myBuffer.setScrollbackCompressionEnabled(true);
+        try {
+            assertTrue(myBuffer.compressHistoryNow() > 0);
+            assertTrue(myBuffer.getCompressedHistoryLinesCount() > 0);
+
+            List<Integer> rows = new ArrayList<>();
+            myBuffer.processImagePlacements(-myBuffer.getHistoryLinesCount(), 10, (placement, row) -> rows.add(row));
+            assertEquals(List.of(0), rows);
+            assertEquals(1, line.getImagePlacements().size());
+            assertEquals("text", line.getText());
+
+            // A reflow reads the packed line and keeps the image at its char.
+            myTerminal.resize(new TermSize(3, 10), RequestOrigin.User);
+            assertEquals(1, allPlacements().size());
+            assertEquals(7L, allPlacements().get(0).getImage().getId());
+        } finally {
+            myBuffer.setScrollbackCompressionEnabled(false);
+        }
+    }
+
+    @Test
     public void anImageAboveTheWindowThatReachesIntoItIsProcessed() throws IOException {
         process(image("a=T,q=2", 10, 100) + "\r\n".repeat(12));
         int historyLineCount = myBuffer.getHistoryLinesCount();

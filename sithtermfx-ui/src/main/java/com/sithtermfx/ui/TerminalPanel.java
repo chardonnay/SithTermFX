@@ -734,6 +734,8 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     public void setFindResult(@Nullable FindResult findResult) {
         myFindResult = findResult;
+        // Find hits are keyed by the identity of the text buffers the compression would replace.
+        myTerminalTextBuffer.setScrollbackCompressionPaused(findResult != null);
         if (myFindResult != null && !myFindResult.getItems().isEmpty()) {
             selectFindResultItem(myFindResult.selectedItem());
         }
