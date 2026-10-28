@@ -152,6 +152,26 @@ public interface UserSettingsProvider {
 
     int getBufferMaxLinesCount();
 
+    /**
+     * The most heap, in bytes, the scrollback of one terminal may hold, in addition to the line limit
+     * of {@link #getBufferMaxLinesCount()}; 0 or less for no memory limit (the default). Read when a
+     * terminal is created; {@link com.sithtermfx.core.model.TerminalTextBuffer#setHistoryMemoryLimit}
+     * changes it for a running one.
+     */
+    default long getBufferMaxMemoryBytes() {
+        return -1;
+    }
+
+    /**
+     * Whether scrollback lines are compressed in the background while the terminal is idle (off by
+     * default). Read when a terminal is created;
+     * {@link com.sithtermfx.core.model.TerminalTextBuffer#setScrollbackCompressionEnabled} changes it
+     * for a running one.
+     */
+    default boolean isScrollbackCompressionEnabled() {
+        return false;
+    }
+
     boolean altSendsEscape();
 
     boolean ambiguousCharsAreDoubleWidth();

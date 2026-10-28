@@ -506,6 +506,51 @@ public @NotNull SearchBarText getSearchBarText() {
 `SearchBarText` also covers the check box tooltip, the next/previous buttons (`nextMatch()`,
 `previousMatch()`) and their tooltips. The find bar reads it each time it is opened.
 
+=== Scrollback Memory Limit and Compression
+
+`getBufferMaxLinesCount()` bounds the scrollback by lines. Two more settings bound it by memory and
+shrink it while the terminal is idle; both are off by default:
+
+[source,java]
+----
+@Override
+public long getBufferMaxMemoryBytes() {
+    return 10L * 1024 * 1024; // drop the oldest lines beyond 10 MB
+}
+
+@Override
+public boolean isScrollbackCompressionEnabled() {
+    return true;
+}
+----
+
+With a memory limit, the history drops its oldest lines once it holds more than the limit, whichever
+of the two limits is reached first. The size is an estimate of the heap the lines hold (line objects,
+text and style runs; shared styles are not counted).
+
+With compression on, a background thread packs history lines into deflated blocks of up to 128 lines
+once the terminal has had no output for 1.5 s, a few milliseconds at a time and only while the
+buffer lock is free. The rows on screen, a screenful around them and the newest screenful of history
+stay unpacked; so do lines with a type-ahead prediction or a custom highlighting, and nothing is
+packed while find results are shown (they are keyed by the identity of the text buffers). A history
+over its memory limit packs old lines before it drops any, so the same limit holds several times
+more lines. Measured with 100,000 history lines, the heap they hold shrinks from 59 MB to 7 MB for
+`ls -l` output and from 67 MB to 9 MB for log lines full of random ids.
+
+A packed line keeps its identity, its wrapped flag and its styles (an OSC 8 link or an embedder's
+`TextStyle` subclass comes back as the same object; equal plain `TextStyle`s share one instance).
+Drawing it or reading its entries unpacks its block; `TerminalLine.getText()` decodes the text
+without unpacking. Both settings are read when the widget is created; change them for a running
+terminal on its buffer:
+
+[source,java]
+----
+TerminalTextBuffer buffer = widget.getTerminalTextBuffer();
+buffer.setHistoryMemoryLimit(50L * 1024 * 1024);
+buffer.setScrollbackCompressionEnabled(false);
+long bytes = buffer.getHistoryMemoryUsage();
+----
+
 '''
 
 == 6. Dynamic Font Size

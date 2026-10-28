@@ -23,11 +23,37 @@ public final class TerminalLine {
 
     private static final Logger logger = LoggerFactory.getLogger(TerminalLine.class);
 
-    private TextEntries myTextEntries = new TextEntries();
+    /** Shallow size of a line object: header, five references, two ints and the wrapped flag. */
+    static final int SHALLOW_BYTES = 48;
+
+    /** An {@link ImagePlacement} object; the image it shows has a quota of its own and is not counted. */
+    private static final int IMAGE_PLACEMENT_BYTES = 96;
+
+    /** The entries list of an unpacked line: {@code TextEntries}, its {@code ArrayList} and array header. */
+    private static final int ENTRIES_OVERHEAD_BYTES = 24 + 24 + 16;
+
+    /**
+     * The line's text and styles, or {@code null} while they are packed into {@link #myPackedBlock}
+     * by the scrollback compression. Read through {@link #entries()}, which unpacks on demand.
+     */
+    private volatile TextEntries myTextEntries = new TextEntries();
+
+    /** The block holding this line's packed content, or {@code null} while it is unpacked. */
+    private volatile PackedLineBlock myPackedBlock;
+
+    /** This line's index in {@link #myPackedBlock}. */
+    private int myPackedIndex;
+
+    /**
+     * The bytes a memory-limited {@link LinesBuffer} counts for this line; only that buffer reads and
+     * writes it, under the text buffer lock.
+     */
+    int myAccountedBytes;
 
     private boolean myWrapped = false;
 
-    private final List<TerminalLineIntervalHighlighting> myCustomHighlightings = new CopyOnWriteArrayList<>();
+    /** Created on the first highlighting: most lines never get one, and an empty list costs ~50 bytes. */
+    private volatile List<TerminalLineIntervalHighlighting> myCustomHighlightings;
 
     private TerminalLine myTypeAheadLine;
 
@@ -46,8 +72,19 @@ public final class TerminalLine {
     }
 
     public @NotNull String getText() {
-        StringBuilder result = new StringBuilder(myTextEntries.myLength);
-        for (TerminalLine.TextEntry textEntry : myTextEntries) {
+        TextEntries entries = myTextEntries;
+        if (entries == null) {
+            // Packed: decode the text alone and leave the line packed, so that reading the scrollback
+            // as text (copy, export, embedders) does not undo the compression.
+            PackedLineBlock block = myPackedBlock;
+            String text = block != null ? block.lineText(this, myPackedIndex) : null;
+            if (text != null) {
+                return text;
+            }
+            entries = entries();
+        }
+        StringBuilder result = new StringBuilder(entries.myLength);
+        for (TerminalLine.TextEntry textEntry : entries) {
             // NUL can only be at the end
             if (textEntry.getText().isNul()) {
                 break;
@@ -59,7 +96,7 @@ public final class TerminalLine {
 
     public @NotNull TerminalLine copy() {
         TerminalLine result = new TerminalLine();
-        for (TextEntry entry : myTextEntries) {
+        for (TextEntry entry : entries()) {
             result.myTextEntries.add(entry);
         }
         result.myWrapped = myWrapped;
@@ -84,8 +121,9 @@ public final class TerminalLine {
     }
 
     public void clear(@NotNull TextEntry filler) {
-        myTextEntries.clear();
-        myTextEntries.add(filler);
+        TextEntries entries = entries();
+        entries.clear();
+        entries.add(filler);
         setWrapped(false);
     }
 
@@ -106,26 +144,28 @@ public final class TerminalLine {
     }
 
     private void writeCharacters(int x, @NotNull TextStyle style, @NotNull CharBuffer characters) {
-        int len = myTextEntries.length();
+        TextEntries entries = entries();
+        int len = entries.length();
         if (x >= len) {
             // fill the gap
             if (x - len > 0) {
-                myTextEntries.add(new TextEntry(TextStyle.EMPTY, new CharBuffer(CharUtils.NUL_CHAR, x - len)));
+                entries.add(new TextEntry(TextStyle.EMPTY, new CharBuffer(CharUtils.NUL_CHAR, x - len)));
             }
-            myTextEntries.add(new TextEntry(style, characters));
+            entries.add(new TextEntry(style, characters));
         } else {
             len = Math.max(len, x + characters.length());
-            myTextEntries = merge(x, characters, style, myTextEntries, len);
+            myTextEntries = merge(x, characters, style, entries, len);
         }
     }
 
     private void insertCharacters(int x, @NotNull TextStyle style, @NotNull CharBuffer characters) {
-        int length = myTextEntries.length();
+        TextEntries entries = entries();
+        int length = entries.length();
         if (x > length) {
             writeCharacters(x, style, characters);
             return;
         }
-        Pair<char[], TextStyle[]> pair = toBuf(myTextEntries, length + characters.length());
+        Pair<char[], TextStyle[]> pair = toBuf(entries, length + characters.length());
         for (int i = length - 1; i >= x; i--) {
             pair.getFirst()[i + characters.length()] = pair.getFirst()[i];
             pair.getSecond()[i + characters.length()] = pair.getSecond()[i];
@@ -180,7 +220,7 @@ public final class TerminalLine {
     }
 
     public void deleteCharacters(int x, @NotNull TextStyle style) {
-        deleteCharacters(x, myTextEntries.length() - x, style);
+        deleteCharacters(x, entries().length() - x, style);
         // delete to the end of line : line is no more wrapped
         setWrapped(false);
     }
@@ -189,7 +229,7 @@ public final class TerminalLine {
         int p = 0;
         TextEntries newEntries = new TextEntries();
         int remaining = count;
-        for (TextEntry entry : myTextEntries) {
+        for (TextEntry entry : entries()) {
             if (remaining == 0) {
                 newEntries.add(entry);
                 continue;
@@ -222,12 +262,13 @@ public final class TerminalLine {
     }
 
     public void insertBlankCharacters(int x, int count, int maxLen, @NotNull TextStyle style) {
-        int len = myTextEntries.length();
+        TextEntries entries = entries();
+        int len = entries.length();
         len = Math.min(len + count, maxLen);
         char[] buf = new char[len];
         TextStyle[] styles = new TextStyle[len];
         int p = 0;
-        for (TextEntry entry : myTextEntries) {
+        for (TextEntry entry : entries) {
             for (int i = 0; i < entry.getLength() && p < len; i++) {
                 if (p == x) {
                     for (int j = 0; j < count && p < len; j++) {
@@ -261,17 +302,18 @@ public final class TerminalLine {
     }
 
     public void clearArea(int leftX, int rightX, @NotNull TextStyle style) {
+        int length = entries().length();
         if (rightX == -1) {
-            rightX = Math.max(myTextEntries.length(), leftX);
+            rightX = Math.max(length, leftX);
         }
         writeCharacters(leftX, style, new CharBuffer(
-                rightX >= myTextEntries.length() ? CharUtils.NUL_CHAR : CharUtils.EMPTY_CHAR,
+                rightX >= length ? CharUtils.NUL_CHAR : CharUtils.EMPTY_CHAR,
                 rightX - leftX));
     }
 
     public @Nullable TextStyle getStyleAt(int x) {
         int i = 0;
-        for (TextEntry te : myTextEntries) {
+        for (TextEntry te : entries()) {
             if (x >= i && x < i + te.getLength()) {
                 return te.getStyle();
             }
@@ -283,9 +325,11 @@ public final class TerminalLine {
     public void process(int y, StyledTextConsumer consumer, int startRow) {
         int x = 0;
         int nulIndex = -1;
-        TerminalLineIntervalHighlighting highlighting = myCustomHighlightings.stream().findFirst().orElse(null);
+        List<TerminalLineIntervalHighlighting> highlightings = myCustomHighlightings;
+        TerminalLineIntervalHighlighting highlighting = highlightings != null
+                ? highlightings.stream().findFirst().orElse(null) : null;
         TerminalLine typeAheadLine = myTypeAheadLine;
-        TextEntries textEntries = typeAheadLine != null ? typeAheadLine.myTextEntries : myTextEntries;
+        TextEntries textEntries = typeAheadLine != null ? typeAheadLine.entries() : entries();
         for (TextEntry te : textEntries) {
             if (te.getText().isNul()) {
                 if (nulIndex < 0) {
@@ -332,7 +376,7 @@ public final class TerminalLine {
     }
 
     public boolean isNul() {
-        for (TextEntry e : myTextEntries) {
+        for (TextEntry e : entries()) {
             if (!e.isNul()) {
                 return false;
             }
@@ -341,7 +385,7 @@ public final class TerminalLine {
     }
 
     public boolean isEmpty() {
-        for (TextEntry e : myTextEntries) {
+        for (TextEntry e : entries()) {
             if (!e.isNul() && e.getLength() > 0) {
                 return false;
             }
@@ -354,15 +398,98 @@ public final class TerminalLine {
     }
 
     public void forEachEntry(@NotNull Consumer<TextEntry> action) {
-        myTextEntries.forEach(action);
+        entries().forEach(action);
     }
 
     public @NotNull List<TextEntry> getEntries() {
-        return Collections.unmodifiableList(myTextEntries.entries());
+        return Collections.unmodifiableList(entries().entries());
     }
 
     void appendEntry(@NotNull TextEntry entry) {
-        myTextEntries.add(entry);
+        entries().add(entry);
+    }
+
+    /**
+     * The line's entries, unpacked first if the scrollback compression packed them. Unpacking
+     * restores the whole block the line was packed with; the line object, its styles and its wrapped
+     * flag never change, only fresh {@link CharBuffer}s replace the packed text.
+     */
+    private @NotNull TextEntries entries() {
+        TextEntries entries = myTextEntries;
+        while (entries == null) {
+            PackedLineBlock block = myPackedBlock;
+            if (block != null) {
+                block.unpack();
+            }
+            entries = myTextEntries;
+        }
+        return entries;
+    }
+
+    /** Whether the scrollback compression currently holds this line's content packed. */
+    boolean isPacked() {
+        return myTextEntries == null;
+    }
+
+    /**
+     * Whether the scrollback compression may pack this line: it is unpacked and nothing is attached
+     * to its live entries, i.e. no type-ahead prediction and no custom highlighting.
+     */
+    boolean isPackable() {
+        List<TerminalLineIntervalHighlighting> highlightings = myCustomHighlightings;
+        return myTextEntries != null && myTypeAheadLine == null
+                && (highlightings == null || highlightings.isEmpty());
+    }
+
+    /** The entries a {@link PackedLineBlock} encodes; only called for an unpacked line, under the buffer lock. */
+    @NotNull List<TextEntry> entriesToPack() {
+        return entries().entries();
+    }
+
+    /** Hands the content over to {@code block}; the block was built from {@link #entriesToPack()}. */
+    void pack(@NotNull PackedLineBlock block, int index) {
+        myPackedIndex = index;
+        myPackedBlock = block;
+        myTextEntries = null;
+    }
+
+    /** Restores content decoded by {@code block}; called by the block, holding its monitor. */
+    void unpacked(@NotNull List<TextEntry> entries) {
+        TextEntries restored = new TextEntries();
+        for (TextEntry entry : entries) {
+            restored.append(entry);
+        }
+        myTextEntries = restored;
+        myPackedBlock = null;
+    }
+
+    /**
+     * An estimate of the heap this line holds: its own object plus either its entries (text arrays
+     * included) or its share of the packed block. Styles are shared and not counted.
+     */
+    int estimateBytes() {
+        TextEntries entries = myTextEntries;
+        if (entries == null) {
+            PackedLineBlock block = myPackedBlock;
+            if (block != null) {
+                return SHALLOW_BYTES + block.bytesPerLine();
+            }
+            entries = entries();
+        }
+        List<TextEntry> list = entries.entries();
+        long bytes = SHALLOW_BYTES + ENTRIES_OVERHEAD_BYTES + 4L * Math.max(10, list.size());
+        for (int i = 0, n = list.size(); i < n; i++) {
+            bytes += TextEntry.estimateBytes(list.get(i).getLength());
+        }
+        List<TerminalLineIntervalHighlighting> highlightings = myCustomHighlightings;
+        if (highlightings != null) {
+            bytes += 48;
+        }
+        List<ImagePlacement> placements = myImagePlacements;
+        if (placements != null) {
+            bytes += 24 + 16 + 4L * Math.max(1, placements.size()) + (long) IMAGE_PLACEMENT_BYTES * placements.size();
+        }
+        return (int) Math.min(Integer.MAX_VALUE, bytes);
     }
 
     /**
@@ -425,19 +552,37 @@ public final class TerminalLine {
 
                     @Override
                     protected void doDispose() {
-                        myCustomHighlightings.remove(this);
+                        List<TerminalLineIntervalHighlighting> highlightings = myCustomHighlightings;
+                        if (highlightings != null) {
+                            highlightings.remove(this);
+                        }
                     }
                 };
-        myCustomHighlightings.add(highlighting);
+        customHighlightings().add(highlighting);
         return highlighting;
+    }
+
+    private @NotNull List<TerminalLineIntervalHighlighting> customHighlightings() {
+        List<TerminalLineIntervalHighlighting> highlightings = myCustomHighlightings;
+        if (highlightings == null) {
+            synchronized (this) {
+                highlightings = myCustomHighlightings;
+                if (highlightings == null) {
+                    highlightings = new CopyOnWriteArrayList<>();
+                    myCustomHighlightings = highlightings;
+                }
+            }
+        }
+        return highlightings;
     }
 
     @Override
     public String toString() {
-        return myTextEntries.length() + " chars, " +
+        TextEntries entries = entries();
+        return entries.length() + " chars, " +
                 (myWrapped ? "wrapped, " : "") +
-                myTextEntries.myTextEntries.size() + " entries: " +
-                myTextEntries.myTextEntries.stream()
+                entries.myTextEntries.size() + " entries: " +
+                entries.myTextEntries.stream()
                         .map(entry -> entry.getText().toString())
                         .collect(Collectors.joining("|"));
     }
@@ -451,6 +596,17 @@ public final class TerminalLine {
         public TextEntry(@NotNull TextStyle style, @NotNull CharBuffer text) {
             myStyle = style;
             myText = text.clone();
+        }
+
+        /** Takes {@code text} as it is; for buffers nobody else holds, such as freshly decoded ones. */
+        TextEntry(@NotNull TextStyle style, @NotNull CharBuffer text, boolean owned) {
+            myStyle = style;
+            myText = owned ? text : text.clone();
+        }
+
+        /** Entry object, its {@link CharBuffer}, the char array with header and padding, and the list slot. */
+        static long estimateBytes(int length) {
+            return 24 + 24 + ((16 + 2L * length + 7) & ~7L);
         }
 
         public TextStyle getStyle() {
@@ -490,6 +646,12 @@ public final class TerminalLine {
                     }
                 }
             }
+            myTextEntries.add(entry);
+            myLength += entry.getLength();
+        }
+
+        /** Appends without the NUL fix-up of {@link #add}: restores entries exactly as they were packed. */
+        void append(TextEntry entry) {
             myTextEntries.add(entry);
             myLength += entry.getLength();
         }

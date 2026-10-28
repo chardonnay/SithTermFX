@@ -16,10 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TtyConnector.resize(TermSize, PixelSize)` gets the size of the text area in pixels with every resize; its default calls `resize(TermSize)`. The demo application's `PtyProcessTtyConnector` passes it to the pty (`ws_xpixel`, `ws_ypixel`).
 - `UserSettingsProvider.isKittyGraphicsEnabled()` (default true) turns the protocol off; the terminal then neither acts on nor answers its commands. `TerminalDisplay.isKittyGraphicsEnabled()` and `getCellPixelSize()` let a display of an embedder's own take part; both default to no images.
 - `TerminalTextBuffer.processImagePlacements(...)`, `TerminalLine.getImagePlacements()` and the new package `com.sithtermfx.core.graphics` (`KittyGraphicsProtocol`, `KittyImage`, `ImagePlacement`) for embedders that render the buffer themselves; `SithTerminal.getKittyGraphics()` returns the stored images.
+- `UserSettingsProvider.getBufferMaxMemoryBytes()` bounds the scrollback by memory as well as by lines (`getBufferMaxLinesCount()`), whichever limit is reached first: once the history lines hold more than the limit (an estimate of their heap), the oldest lines are dropped. The default, -1, keeps the old behaviour. `TerminalTextBuffer.setHistoryMemoryLimit(long)` changes the limit of a running terminal and applies it at once; `getHistoryMemoryUsage()` returns the estimate.
+- Scrollback compression, off by default (`UserSettingsProvider.isScrollbackCompressionEnabled()`, `TerminalTextBuffer.setScrollbackCompressionEnabled(boolean)`): once a terminal has had no output for 1.5 s, a low-priority background thread packs its history lines into deflated blocks of up to 128 lines, a few milliseconds at a time while the buffer lock is free. The rows on screen with a screenful around them and the newest screenful of history stay unpacked, and nothing is packed while find results are shown. A history over its memory limit packs old lines before it drops any. Packed lines keep their identity, wrapped flag and styles (links and `TextStyle` subclasses keep their identity, equal plain styles are shared); drawing a line or reading its entries unpacks its block, `TerminalLine.getText()` decodes without unpacking. Measured with 100,000 history lines, the heap they hold shrinks from 59 MB to 7 MB for `ls -l` output and from 67 MB to 9 MB for log lines full of random ids. `compressHistoryNow()` and `getCompressedHistoryLinesCount()` are there for embedders and tests.
 
 ### Changed
 
 - `TerminalPanel.myCharSize` is volatile, as the emulator thread reads the cell size.
+- A line scrolled out of the screen no longer brings its own copy of the blank filler style: the filler style is shared while the current style stays the same, which saves about 56 bytes per history line.
+- A `TerminalLine` creates its custom-highlighting list on the first highlighting instead of up front (about 50 bytes per line).
 
 ---
 

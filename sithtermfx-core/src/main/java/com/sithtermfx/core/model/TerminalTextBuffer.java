@@ -32,6 +32,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * stores lines that are shown currently on the screen and they have there(in TextBuffer) their initial length (even if
  * it doesn't fit to screen width).
  * <p/>
+ * The history can be bounded by memory as well as by line count ({@link #setHistoryMemoryLimit}),
+ * and its lines can be compressed while the terminal is idle ({@link #setScrollbackCompressionEnabled}).
  */
 public class TerminalTextBuffer {
 
@@ -74,6 +76,32 @@ public class TerminalTextBuffer {
     /** The most rows an image placement ever covered: how far above a window an image may start that shows in it. */
     private int myMaxImageRows;
 
+    /** The style {@link #myEmptyStyleWithCurrentColor} was made from. */
+    private TextStyle myEmptyStyleSource;
+
+    private TextStyle myEmptyStyleWithCurrentColor;
+
+    /** The history's memory limit in bytes, 0 or less for none. */
+    private long myHistoryMaxBytes = -1;
+
+    private boolean myCompressionEnabled;
+
+    private volatile boolean myCompressionPaused;
+
+    /** When the buffer last changed, for the idle check of the background compression. */
+    private volatile long myLastChangeNanos = System.nanoTime();
+
+    /** Whether a compression pass may find something to pack: set by changes, cleared by a full pass. */
+    private volatile boolean myCompressionPending;
+
+    /** {@link PackedLineBlock#unpackCount()} at the end of the last full compression pass. */
+    private long myCompressionPassUnpacks;
+
+    /** The history rows the last render showed, {@code [from, to)}; empty while the view is at the bottom. */
+    private int myViewHistoryFrom;
+
+    private int myViewHistoryTo;
+
     public TerminalTextBuffer(final int width, final int height, @NotNull StyleState styleState) {
         this(width, height, styleState, null);
     }
@@ -101,7 +129,10 @@ public class TerminalTextBuffer {
 
     @NotNull
     private LinesBuffer createHistoryBuffer() {
-        return new LinesBuffer(myHistoryLinesCount, myTextProcessing);
+        LinesBuffer buffer = new LinesBuffer(myHistoryLinesCount, myTextProcessing);
+        buffer.setMaxBytes(myHistoryMaxBytes);
+        buffer.setPackingAllowed(isPackingAllowed());
+        return buffer;
     }
 
     @NotNull
@@ -197,6 +228,8 @@ public class TerminalTextBuffer {
     }
 
     void fireModelChangeEvent() {
+        myLastChangeNanos = System.nanoTime();
+        myCompressionPending = true;
         for (TerminalModelListener modelListener : myListeners) {
             modelListener.modelChanged();
         }
@@ -209,7 +242,16 @@ public class TerminalTextBuffer {
     }
 
     private TextStyle createEmptyStyleWithCurrentColor() {
-        return myStyleState.getCurrent().createEmptyWithColors();
+        // Every scrolled line gets a filler in this style: share one object (with its option set,
+        // ~56 bytes) while the current style stays the same, instead of one per line.
+        TextStyle current = myStyleState.getCurrent();
+        TextStyle empty = myEmptyStyleWithCurrentColor;
+        if (current != myEmptyStyleSource || empty == null) {
+            empty = current.createEmptyWithColors();
+            myEmptyStyleSource = current;
+            myEmptyStyleWithCurrentColor = empty;
+        }
+        return empty;
     }
 
     private TextEntry createFillerEntry() {
@@ -463,6 +505,8 @@ public class TerminalTextBuffer {
      * @param scrollOrigin row where a scrolling window starts, should be in the range [-history_lines_count, 0]
      */
     public void processHistoryAndScreenLines(int scrollOrigin, int maximalLinesToProcess, StyledTextConsumer consumer) {
+        // A render asks for a screenful; a search asks for everything (-1).
+        boolean render = maximalLinesToProcess >= 0 && maximalLinesToProcess <= Math.max(myHeight, 1) * 2;
         if (maximalLinesToProcess < 0) {
             //Process all lines in this case
             maximalLinesToProcess = myHistoryBuffer.getLineCount() + myScreenBuffer.getLineCount();
@@ -471,6 +515,15 @@ public class TerminalTextBuffer {
         int y = myHistoryBuffer.getLineCount() + scrollOrigin;
         if (y < 0) { // it seems that lower bound of scrolling can get out of sync with history buffer lines count
             y = 0; // to avoid exception we start with the first line in this case
+        }
+        if (render) {
+            // Keep what the terminal shows away from the compression.
+            int viewTo = y + Math.max(0, linesFromHistory);
+            if (y != myViewHistoryFrom || viewTo != myViewHistoryTo) {
+                myViewHistoryFrom = y;
+                myViewHistoryTo = viewTo;
+                myCompressionPending = true;
+            }
         }
         myHistoryBuffer.processLines(y, linesFromHistory, consumer, y);
         if (linesFromHistory < maximalLinesToProcess) {
@@ -620,5 +673,198 @@ public class TerminalTextBuffer {
     @Nullable
     TextProcessing getTextProcessing() {
         return myTextProcessing;
+    }
+
+    // ---- history memory limit and scrollback compression ----
+
+    /**
+     * Bounds the history by memory as well as by line count: once its lines hold more than
+     * {@code maxBytes} (an estimate of their heap, see {@link #getHistoryMemoryUsage()}), the oldest
+     * lines are dropped, after packing old lines first while compression is on. 0 or less removes
+     * the bound. Applies to the alternate screen's history too, and at once to the current lines.
+     */
+    public void setHistoryMemoryLimit(long maxBytes) {
+        modify(() -> {
+            myHistoryMaxBytes = maxBytes;
+            int before = myHistoryBuffer.getLineCount();
+            myHistoryBuffer.setMaxBytes(maxBytes);
+            if (myHistoryBufferBackup != null) {
+                myHistoryBufferBackup.setMaxBytes(maxBytes);
+            }
+            if (myHistoryBuffer.getLineCount() != before) {
+                fireHistoryBufferLineCountChanged();
+            }
+        });
+        fireModelChangeEvent();
+    }
+
+    public long getHistoryMemoryLimit() {
+        return myHistoryMaxBytes;
+    }
+
+    /**
+     * The heap the history lines hold, estimated: line objects, text and style runs, or their share of
+     * a compressed block. Lines read since they were compressed still count as compressed until the
+     * next compression pass. Includes the main history while the alternate screen is active.
+     */
+    public long getHistoryMemoryUsage() {
+        myLock.lock();
+        try {
+            long bytes = myHistoryBuffer.getEstimatedBytes();
+            if (myUsingAlternateBuffer && myHistoryBufferBackup != null) {
+                bytes += myHistoryBufferBackup.getEstimatedBytes();
+            }
+            return bytes;
+        } finally {
+            myLock.unlock();
+        }
+    }
+
+    /** The number of history lines whose content is currently compressed. Walks every line. */
+    public int getCompressedHistoryLinesCount() {
+        myLock.lock();
+        try {
+            int count = myHistoryBuffer.getPackedLineCount();
+            if (myUsingAlternateBuffer && myHistoryBufferBackup != null) {
+                count += myHistoryBufferBackup.getPackedLineCount();
+            }
+            return count;
+        } finally {
+            myLock.unlock();
+        }
+    }
+
+    /**
+     * Turns the scrollback compression on or off. While on, history lines that are neither shown nor
+     * among the newest screenful are packed into deflated blocks in the background, a slice at a
+     * time, once the terminal has had no output for a moment; a history over its memory limit packs
+     * old lines before it drops any. A packed line unpacks (with its whole block) when it is drawn or
+     * its entries are read, keeping its identity and its styles; reading its text alone does not
+     * unpack it. Turning compression off leaves packed lines packed until they are read.
+     */
+    public void setScrollbackCompressionEnabled(boolean enabled) {
+        modify(() -> {
+            myCompressionEnabled = enabled;
+            applyPackingAllowed();
+        });
+        if (enabled) {
+            myCompressionPending = true;
+            ScrollbackCompressor.register(this);
+        } else {
+            ScrollbackCompressor.unregister(this);
+        }
+    }
+
+    public boolean isScrollbackCompressionEnabled() {
+        return myCompressionEnabled;
+    }
+
+    /**
+     * Holds the compression back without turning it off, e.g. while find results are shown: they
+     * are keyed by the identity of the text buffers the compression would replace.
+     */
+    public void setScrollbackCompressionPaused(boolean paused) {
+        if (myCompressionPaused == paused) {
+            return;
+        }
+        modify(() -> {
+            myCompressionPaused = paused;
+            applyPackingAllowed();
+        });
+        myCompressionPending = true;
+    }
+
+    public boolean isScrollbackCompressionPaused() {
+        return myCompressionPaused;
+    }
+
+    /**
+     * Compresses every history line the background compression would, now and without waiting
+     * for the terminal to go idle.
+     *
+     * @return the number of lines compressed
+     */
+    public int compressHistoryNow() {
+        myLock.lock();
+        try {
+            int packed = 0;
+            int result;
+            do {
+                result = compressSlice(Integer.MAX_VALUE);
+                packed += result < 0 ? -(result + 1) : result;
+            } while (result < 0);
+            return packed;
+        } finally {
+            myLock.unlock();
+        }
+    }
+
+    /**
+     * One slice of the background compression, from {@link ScrollbackCompressor}: does nothing
+     * unless the buffer has had no change for {@code idleNanos} and its lock is free, then packs for
+     * about {@code sliceNanos}.
+     */
+    void compressIdleHistory(long nowNanos, long idleNanos, long sliceNanos) {
+        if (!isPackingAllowed()
+                || (!myCompressionPending && myCompressionPassUnpacks == PackedLineBlock.unpackCount())
+                || nowNanos - myLastChangeNanos < idleNanos
+                || !myLock.tryLock()) {
+            return;
+        }
+        try {
+            long deadline = System.nanoTime() + sliceNanos;
+            int result;
+            do {
+                result = compressSlice(4);
+            } while (result < 0 && System.nanoTime() < deadline);
+        } finally {
+            myLock.unlock();
+        }
+    }
+
+    /**
+     * Packs up to {@code maxBlocks} blocks of the history, and of the main history while the
+     * alternate screen is active, under the lock. Keeps the newest screenful and the rows last shown
+     * (with a screenful around them) unpacked.
+     *
+     * @return the lines packed, or {@code -(packed + 1)} if work remains
+     */
+    private int compressSlice(int maxBlocks) {
+        long unpacks = PackedLineBlock.unpackCount();
+        int keep = Math.max(myHeight, 1);
+        int protectFrom = -1;
+        int protectTo = -1;
+        if (myViewHistoryTo > myViewHistoryFrom) {
+            protectFrom = myViewHistoryFrom - keep;
+            protectTo = myViewHistoryTo + keep;
+        }
+        int packed = myHistoryBuffer.packLines(0, myHistoryBuffer.getLineCount() - keep, protectFrom, protectTo,
+                1, maxBlocks, false);
+        if (packed < 0) {
+            return packed;
+        }
+        if (myUsingAlternateBuffer && myHistoryBufferBackup != null) {
+            int result = myHistoryBufferBackup.packLines(0, myHistoryBufferBackup.getLineCount() - keep, -1, -1,
+                    1, maxBlocks, false);
+            if (result < 0) {
+                return result - packed;
+            }
+            packed += result;
+        }
+        myCompressionPending = false;
+        myCompressionPassUnpacks = unpacks;
+        return packed;
+    }
+
+    private boolean isPackingAllowed() {
+        return myCompressionEnabled && !myCompressionPaused;
+    }
+
+    private void applyPackingAllowed() {
+        boolean allowed = isPackingAllowed();
+        myHistoryBuffer.setPackingAllowed(allowed);
+        if (myHistoryBufferBackup != null) {
+            myHistoryBufferBackup.setPackingAllowed(allowed);
+        }
     }
 }
