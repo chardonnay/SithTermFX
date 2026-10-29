@@ -10,6 +10,7 @@ import com.sithtermfx.core.TerminalStarter;
 import com.sithtermfx.core.TextStyle;
 import com.sithtermfx.core.TtyBasedArrayDataStream;
 import com.sithtermfx.core.TtyConnector;
+import com.sithtermfx.core.clipboard.TerminalClipboardHandler;
 import com.sithtermfx.core.emulator.EmulationType;
 import com.sithtermfx.core.model.JediTermDebouncerImpl;
 import com.sithtermfx.core.model.SithTerminal;
@@ -574,6 +575,14 @@ public class SithTermFxWidget implements TerminalSession, TerminalWidget, Termin
      */
     public void setLinkInfoProvider(LinkInfoProvider linkInfoProvider) {
         myTextProcessing.setLinkInfoProvider(linkInfoProvider);
+    }
+
+    /**
+     * Gives programs in the terminal clipboard access with OSC 5522, kitty's clipboard protocol, or takes it away
+     * with null, the default. {@link JavaFxClipboardHandler} uses the system clipboard and asks before a read.
+     */
+    public void setClipboardHandler(@Nullable TerminalClipboardHandler handler) {
+        myTerminal.setClipboardHandler(handler);
     }
 
     @Override

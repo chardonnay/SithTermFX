@@ -1409,6 +1409,58 @@ they then fall back to text output.
 
 '''
 
+== 13. Clipboard Access for Programs (OSC 5522)
+
+SithTermFX speaks https://sw.kovidgoyal.net/kitty/clipboard/[OSC 5522], kitty's clipboard protocol: programs in
+the terminal — also on a server, over SSH — read and write the clipboard in any MIME type (text, HTML, images),
+the terminal asks the user before a read, and a paste can reach the program as a *paste event*. *It is off by
+default*: a program gets clipboard access only once you set a handler, which decides what is allowed.
+
+=== Turning It On
+
+[source,java]
+----
+import com.sithtermfx.ui.JavaFxClipboardHandler;
+
+// programs may write; a read asks the user in a dialog
+widget.setClipboardHandler(new JavaFxClipboardHandler(true,
+        JavaFxClipboardHandler.askUser(() -> stage)));
+----
+
+`JavaFxClipboardHandler` uses the system clipboard through JavaFX:
+
+* *Writes* are allowed or not as a whole (the first argument). A write replaces the clipboard with every MIME
+  type the program sent, aliases included.
+* *Reads* happen only when the `ReadPermission` allows them. `askUser(...)` shows a dialog naming the program (as
+  it names itself, without control and bidi chars) and the MIME types; *Allow for This Program* is offered when the
+  program sent a name and password, and allows its later reads for the session. `DENY_READS` refuses every read.
+* Listing the MIME types on the clipboard needs no permission.
+* Text, HTML, RTF and URI lists are exchanged as the clipboard holds them, images as `image/png`; any other MIME
+  type as raw bytes under a JavaFX `DataFormat` of that name.
+* JavaFX has no primary selection: `loc=primary` is answered with `ENOSYS`.
+
+For your own policy — an enterprise rule, an internal clipboard, a log of who copied what — implement
+`com.sithtermfx.core.clipboard.TerminalClipboardHandler` instead. It is called on the emulator thread and must
+not block it: return a `CompletionStage` and complete it later, exceptionally with a `ClipboardException` for a
+specific status (`EPERM`, `EBUSY`, `ENOSYS`, `EIO`, `EINVAL`, `EFBIG`).
+
+=== What the Terminal Does
+
+* It parses the packets, collects a write's chunks per MIME type and checks them: base64 must be strict (padded,
+  no line breaks), the data of one write is at most `ClipboardProtocol.MAX_WRITE_BYTES` (64 MiB, the minimum the
+  protocol asks for), and there are at most `MAX_MIME_TYPES` (32) types. After an error the rest of the write is
+  ignored until the next one starts.
+* It sends read data in 4096-byte chunks and answers a second read while one is in progress with `EBUSY`.
+* It echoes the request `id`, stripped of the chars the protocol forbids.
+* Programs detect support with DECRQM: `CSI ? 5522 $ p` is answered with `CSI ? 5522 ; 0 $ y` without a handler,
+  else `1` or `2` for the paste event mode.
+* With private mode 5522 (`CSI ? 5522 h`), `TerminalPanel.handlePaste()` sends a paste as a paste event: the
+  list of MIME types with a one-time password, with which the program then reads what it wants without a prompt
+  (`ClipboardReadRequest.isGrantedByPaste()`). A subclass that pastes its own way calls `sendClipboardPasteEvent()`
+  first.
+
+'''
+
 == Running the Built-in Examples
 
 SithTermFX ships with ready-to-run examples:

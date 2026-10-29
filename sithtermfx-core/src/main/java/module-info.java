@@ -6,6 +6,7 @@ module com.sithtermfx.core {
     requires java.desktop;
 
     exports com.sithtermfx.core;
+    exports com.sithtermfx.core.clipboard;
     exports com.sithtermfx.core.compatibility;
     exports com.sithtermfx.core.emulator;
     exports com.sithtermfx.core.emulator.charset;

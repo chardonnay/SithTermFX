@@ -23,6 +23,7 @@ The following packages are considered public and stable within a major version:
 * `com.sithtermfx.core.emulator.hp` — HP 2392 and HP 700/92 terminal emulators
 * `com.sithtermfx.core.emulator.petscii` — Commodore PETSCII terminal emulator
 * `com.sithtermfx.core.graphics` — Kitty graphics protocol (`KittyGraphicsProtocol`, `KittyImage`, `ImagePlacement`)
+* `com.sithtermfx.core.clipboard` — Clipboard protocol OSC 5522 (`TerminalClipboardHandler`, `ClipboardProtocol`, requests and errors)
 * `com.sithtermfx.core.typeahead` — Type-ahead prediction
 * `com.sithtermfx.ui` — JavaFX terminal widget
 * `com.sithtermfx.ui.settings` — Settings and theming
@@ -45,6 +46,7 @@ The following packages are considered public and stable within a major version:
 * *Kitty graphics protocol* on or off via `UserSettingsProvider.isKittyGraphicsEnabled()` (default on)
 * *Window size in pixels* for programs that draw images via `TtyConnector.resize(TermSize, com.sithtermfx.core.util.PixelSize)`
 * *Image placements* for custom rendering via `TerminalTextBuffer.processImagePlacements(...)` and `TerminalLine.getImagePlacements()`
+* *Clipboard access for programs* (OSC 5522, off by default) via `SithTermFxWidget.setClipboardHandler(...)` with `com.sithtermfx.ui.JavaFxClipboardHandler` or your own `com.sithtermfx.core.clipboard.TerminalClipboardHandler`
 * *Scrollback memory limit and compression* via `UserSettingsProvider.getBufferMaxMemoryBytes()` and `isScrollbackCompressionEnabled()`, changed at runtime with `TerminalTextBuffer.setHistoryMemoryLimit(long)` and `setScrollbackCompressionEnabled(boolean)`
 
 == Emulation Types

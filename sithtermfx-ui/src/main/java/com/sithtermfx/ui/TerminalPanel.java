@@ -2412,7 +2412,22 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
     }
 
     public void handlePaste() {
+        if (sendClipboardPasteEvent()) {
+            return;
+        }
         pasteFromClipboard(false);
+    }
+
+    /**
+     * Sends a paste as a paste event of the clipboard protocol (OSC 5522), when the program asked for them with
+     * private mode 5522 and the terminal has a clipboard handler: the program then reads what it wants.
+     *
+     * @return whether the paste went out as a paste event
+     */
+    protected boolean sendClipboardPasteEvent() {
+        TerminalStarter starter = myTerminalStarter;
+        return starter != null && starter.getTerminal() instanceof SithTerminal
+                && ((SithTerminal) starter.getTerminal()).getClipboardProtocol().sendPasteEvent();
     }
 
     private void handlePasteSelection() {

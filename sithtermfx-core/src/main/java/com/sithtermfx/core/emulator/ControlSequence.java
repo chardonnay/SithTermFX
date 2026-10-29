@@ -42,6 +42,8 @@ public class ControlSequence {
 
     private boolean myStartsWithMoreMark = false; // true when CSI >
 
+    private boolean myHasDollarIntermediate = false; // true when CSI ... $ final, as DECRQM
+
     private final StringBuilder mySequenceString = new StringBuilder();
 
     private boolean mySequenceStringTruncated = false;
@@ -96,6 +98,9 @@ public class ControlSequence {
                 seenDigit = 1;
             } else if (':' <= b && b <= '?') {
                 addUnhandled(b);
+            } else if (b == '$') {
+                // the intermediate of DECRQM and the other DEC $ sequences, part of the sequence, not text
+                myHasDollarIntermediate = true;
             } else if (0x40 <= b && b <= 0x7E) {
                 myFinalChar = b;
                 break;
@@ -213,6 +218,13 @@ public class ControlSequence {
 
     public boolean startsWithMoreMark() {
         return myStartsWithMoreMark;
+    }
+
+    /**
+     * @return whether the sequence has the intermediate {@code $}, as DECRQM ({@code CSI ? Ps $ p}) has
+     */
+    public boolean hasDollarIntermediate() {
+        return myHasDollarIntermediate;
     }
 
     public @NotNull String getDebugInfo() {
