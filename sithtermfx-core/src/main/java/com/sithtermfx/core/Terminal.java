@@ -204,6 +204,27 @@ public interface Terminal {
     }
 
     /**
+     * Executes a command of the clipboard protocol (OSC 5522).
+     *
+     * @param command the body of the OSC after {@code 5522;}
+     */
+    default void processClipboardCommand(@NotNull String command) {
+    }
+
+    /**
+     * Sets private mode 5522 of the clipboard protocol: pastes reach the program as paste events.
+     */
+    default void setClipboardPasteEvents(boolean enabled) {
+    }
+
+    /**
+     * @return whether private mode 5522 is set, or null when the terminal does not support the clipboard protocol
+     */
+    default @Nullable Boolean getClipboardPasteEventsMode() {
+        return null;
+    }
+
+    /**
      * @return the size of one character cell in pixels, or null when it is not known
      */
     default @Nullable PixelSize getCellPixelSize() {

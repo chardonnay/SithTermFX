@@ -22,6 +22,7 @@ toc::[]
 * Mouse support
 * *Clickable hyperlinks* — OSC 8 explicit hyperlinks (including local `file://` links from tools like `ls --hyperlink`) plus optional automatic URL detection
 * *Images* — the kitty graphics protocol, for `kitten icat`, yazi, ranger, timg, chafa, mpv `--vo=kitty` and others
+* *Clipboard protocol* — OSC 5522: programs read and write the clipboard in any MIME type, with a prompt before reads (off until enabled)
 * Terminal resizing from client or server side
 * Terminal tabs
 * *Dynamic font size* — Adjust font size at runtime via Ctrl+Plus/Minus (Cmd+Plus/Minus on Mac) without disconnecting
@@ -197,6 +198,12 @@ Reading images from files or shared memory, animation, Unicode placeholders and 
 Programs size images from the window size in pixels: override `TtyConnector.resize(TermSize, PixelSize)` to pass it on (the terminal also answers `CSI 14 t` and `CSI 16 t`).
 `isKittyGraphicsEnabled()` in `UserSettingsProvider` turns the protocol off.
 See the link:docs/integration-guide.adoc[Integration Guide § Images] for details.
+
+=== Clipboard Access for Programs
+
+With https://sw.kovidgoyal.net/kitty/clipboard/[OSC 5522], kitty's clipboard protocol, programs in the terminal read and write the clipboard in any MIME type, and with private mode 5522 a paste reaches them as a paste event.
+It is off until you set a handler: `widget.setClipboardHandler(new JavaFxClipboardHandler(true, JavaFxClipboardHandler.askUser(() -> stage)))` lets programs write and asks the user before each read; implement `TerminalClipboardHandler` for a policy of your own.
+See the link:docs/integration-guide.adoc[Integration Guide § Clipboard Access] for details.
 
 == Public API
 

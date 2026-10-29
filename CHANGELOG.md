@@ -5,6 +5,21 @@ All notable changes to SithTermFX are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- OSC 5522, kitty's clipboard protocol (https://sw.kovidgoyal.net/kitty/clipboard/): programs read and write the clipboard in any MIME type, with aliases, chunked writes and the `id` echo; with private mode 5522 a paste reaches the program as a paste event with a one-time password. Off by default: `SithTermFxWidget.setClipboardHandler(...)` (or `SithTerminal.setClipboardHandler(...)`) takes a `com.sithtermfx.core.clipboard.TerminalClipboardHandler`, which decides what is allowed and does the access asynchronously. Programs detect support with DECRQM `CSI ? 5522 $ p`.
+- `com.sithtermfx.ui.JavaFxClipboardHandler`: the system clipboard through JavaFX, writes allowed or not, reads only after a `ReadPermission` (`askUser(...)` shows a dialog, optionally remembering a program by name and password; `DENY_READS`), text, HTML, RTF, URI lists and `image/png`.
+- Limits for untrusted writes: strict base64, at most 64 MiB (`ClipboardProtocol.MAX_WRITE_BYTES`) and 32 MIME types per write, one read at a time (`EBUSY`).
+- `TerminalPanel.sendClipboardPasteEvent()`, called by `handlePaste()`, for subclasses that paste their own way.
+
+### Fixed
+
+- A CSI with the intermediate `$` (DECRQM and the other DEC `$` sequences) no longer prints the `$` and runs as the sequence without it: `CSI ... $ r` (DECCARA) used to set the scrolling region like DECSTBM. Of these sequences only DECRQM for mode 5522 is answered; the others are ignored.
+
+---
+
 ## [1.2.6] - 2026-10-28
 
 ### Added

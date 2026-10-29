@@ -290,6 +290,10 @@ public class SithEmulator extends DataStreamIteratingEmulator {
                 // As there is no support for `Ps = 4 ; c ; spec` (Change Color Number c to the color specified by spec),
                 // resetting is just no operation.
                 return true;
+            case 5522: // clipboard protocol https://sw.kovidgoyal.net/kitty/clipboard/
+                List<String> clipboardArgs = args.getArgs();
+                myTerminal.processClipboardCommand(String.join(";", clipboardArgs.subList(1, clipboardArgs.size())));
+                return true;
             case 1341:
                 List<String> argList = args.getArgs();
                 myTerminal.processCustomCommand(argList.subList(1, argList.size()));
@@ -441,6 +445,11 @@ public class SithEmulator extends DataStreamIteratingEmulator {
     }
 
     private boolean processControlSequence(ControlSequence args) {
+        if (args.hasDollarIntermediate()) {
+            // Of the DEC $ sequences only DECRQM is answered; none of the others may run as the sequence
+            // without its $ (CSI ... $ r is DECCARA, not DECSTBM).
+            return args.getFinalChar() == 'p' && requestMode(args);
+        }
         switch (args.getFinalChar()) {
             case '@':
                 return insertBlankCharacters(args); //ICH
@@ -531,6 +540,20 @@ public class SithEmulator extends DataStreamIteratingEmulator {
             default:
                 return false;
         }
+    }
+
+    /**
+     * DECRQM ({@code CSI ? Ps $ p}), answered with {@code CSI ? Ps ; Pm $ y}, for mode 5522 of the clipboard
+     * protocol: 1 set, 2 reset, 0 when the terminal has no clipboard handler. Other modes are not answered.
+     */
+    private boolean requestMode(ControlSequence args) {
+        if (!args.startsWithQuestionMark() || args.getArg(0, -1) != 5522) {
+            return false;
+        }
+        Boolean pasteEvents = myTerminal.getClipboardPasteEventsMode();
+        int state = pasteEvents == null ? 0 : pasteEvents ? 1 : 2;
+        myTerminal.deviceStatusReport(Ascii.ESC_CHAR + "[?5522;" + state + "$y");
+        return true;
     }
 
     private boolean windowManipulation(ControlSequence args) {
@@ -732,6 +755,9 @@ public class SithEmulator extends DataStreamIteratingEmulator {
                     return true;
                 case 1039:
                     setModeEnabled(TerminalMode.AltSendsEscape, enabled);
+                    return true;
+                case 5522: // clipboard protocol: pastes reach the program as paste events
+                    myTerminal.setClipboardPasteEvents(enabled);
                     return true;
                 case 2004:
                     setModeEnabled(TerminalMode.BracketedPasteMode, enabled);

@@ -23,8 +23,20 @@ public class ControlSequenceTest {
     @Test
     public void pushesBackStrayCharsAheadOfTheSequence() throws IOException {
         assertEquals("\b" + ESC + "[2C", pushedBack("2\bC"));
-        assertEquals("$" + ESC + "[?25p", pushedBack("?25$p"));
+        assertEquals("\u0007" + ESC + "[?25p", pushedBack("?25\u0007p"));
         assertEquals(" " + ESC + "[1;22;333q", pushedBack("1;22;333 q"));
+    }
+
+    @Test
+    public void keepsTheDollarIntermediateInTheSequence() throws IOException {
+        ArrayTerminalDataStream stream = new ArrayTerminalDataStream("?5522$p".toCharArray());
+        ControlSequence sequence = new ControlSequence(stream);
+
+        assertFalse(sequence.pushBackReordered(stream));
+        assertTrue(sequence.hasDollarIntermediate());
+        assertTrue(sequence.startsWithQuestionMark());
+        assertEquals(5522, sequence.getArg(0, -1));
+        assertEquals('p', sequence.getFinalChar());
     }
 
     @Test

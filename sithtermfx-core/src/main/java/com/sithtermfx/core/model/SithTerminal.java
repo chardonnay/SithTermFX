@@ -18,6 +18,8 @@ import com.sithtermfx.core.TerminalKeyEncoder;
 import com.sithtermfx.core.Color;
 import com.sithtermfx.core.util.Platform;
 import com.sithtermfx.core.TerminalCoordinates;
+import com.sithtermfx.core.clipboard.ClipboardProtocol;
+import com.sithtermfx.core.clipboard.TerminalClipboardHandler;
 import com.sithtermfx.core.compatibility.Point;
 import com.sithtermfx.core.graphics.ImagePlacement;
 import com.sithtermfx.core.graphics.KittyGraphicsProtocol;
@@ -107,6 +109,8 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
     private static final PixelSize DEFAULT_CELL_PIXEL_SIZE = new PixelSize(10, 20);
 
     private final KittyGraphicsProtocol myKittyGraphics = new KittyGraphicsProtocol(new KittyGraphicsHost());
+
+    private final ClipboardProtocol myClipboard = new ClipboardProtocol(this::deviceStatusReport);
 
     public SithTerminal(@NotNull TerminalDisplay display, @NotNull TerminalTextBuffer buf,
                         @NotNull StyleState initialStyleState) {
@@ -377,6 +381,36 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
     @Override
     public @Nullable PixelSize getCellPixelSize() {
         return myDisplay.getCellPixelSize();
+    }
+
+    @Override
+    public void processClipboardCommand(@NotNull String command) {
+        myClipboard.handle(command);
+    }
+
+    @Override
+    public void setClipboardPasteEvents(boolean enabled) {
+        myClipboard.setPasteEventsEnabled(enabled);
+    }
+
+    @Override
+    public @Nullable Boolean getClipboardPasteEventsMode() {
+        return myClipboard.isSupported() ? myClipboard.isPasteEventsEnabled() : null;
+    }
+
+    /**
+     * Gives programs clipboard access with OSC 5522, or takes it away with null (the default): the handler decides
+     * what they may read and write.
+     */
+    public void setClipboardHandler(@Nullable TerminalClipboardHandler handler) {
+        myClipboard.setHandler(handler);
+    }
+
+    /**
+     * @return the clipboard protocol (OSC 5522) of this terminal
+     */
+    public @NotNull ClipboardProtocol getClipboardProtocol() {
+        return myClipboard;
     }
 
     /**
@@ -871,6 +905,7 @@ public class SithTerminal implements Terminal, TerminalMouseListener, TerminalCo
         }
         initModes();
         initMouseModes();
+        myClipboard.reset();
         cursorPosition(1, 1);
         cursorShape(null);
     }
